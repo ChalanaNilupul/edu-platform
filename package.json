@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "pnpm --parallel --filter \"./apps/*\" dev",
     "build": "pnpm --recursive --if-present build",
-    "lint": "eslint .",
+    "lint": "pnpm --recursive --if-present lint",
     "typecheck": "pnpm --recursive --if-present typecheck",
     "test": "pnpm --recursive --if-present test",
     "format": "prettier --write .",
