@@ -8,6 +8,58 @@ datasource db {
   provider = "postgresql"
 }
 
+enum WorkspaceType {
+  TEACHER
+  INSTITUTE
+}
+
+enum MembershipStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model User {
+  id           String       @id @default(uuid())
+  email        String       @unique
+  passwordHash String       @map("password_hash")
+  firstName    String       @map("first_name")
+  lastName     String?      @map("last_name")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt    DateTime     @default(now()) @map("created_at")
+  updatedAt    DateTime     @updatedAt @map("updated_at")
+
+  memberships Membership[]
+
+  @@map("users")
+}
+
+model Workspace {
+  id        String        @id @default(uuid())
+  name      String
+  type      WorkspaceType
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  memberships Membership[]
+
+  @@map("workspaces")
+}
+
+model Membership {
+  id          String           @id @default(uuid())
+  userId      String           @map("user_id")
+  workspaceId String           @map("workspace_id")
+  status      MembershipStatus @default(ACTIVE)
+  createdAt   DateTime         @default(now()) @map("created_at")
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+  @@map("memberships")
+}
+
 model DatabaseHealth {
   id        String   @id @default(uuid())
   createdAt DateTime @default(now())
