@@ -27,9 +27,7 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('EduPlatform API')
-    .setDescription(
-      'REST API for the EduPlatform education management platform.',
-    )
+    .setDescription('REST API for the EduPlatform education management platform.')
     .setVersion('1.0')
     .addBearerAuth()
     .build();
