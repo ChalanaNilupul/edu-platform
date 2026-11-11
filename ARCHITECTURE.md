@@ -24,22 +24,22 @@ The initial market is Sri Lanka. Initial language support is English, Sinhala an
 
 ## 3. Approved technology stack
 
-| Layer | Approved choice |
-|---|---|
-| Web frontend | Next.js + TypeScript |
-| Backend runtime | Node.js |
-| Backend language/framework | TypeScript + NestJS |
-| Application architecture | Modular monolith |
-| API | REST + JSON |
-| API documentation | OpenAPI / Swagger |
-| Database | PostgreSQL |
-| ORM | Prisma |
-| Styling | Tailwind CSS |
-| File storage | Cloudflare R2, behind a provider-independent S3-compatible storage interface |
-| Containers | Docker from the beginning |
-| CI/CD | GitHub Actions |
-| Future cache/queue | Redis + BullMQ, when justified |
-| Future real-time | Socket.IO, when required |
+| Layer                      | Approved choice                                                              |
+| -------------------------- | ---------------------------------------------------------------------------- |
+| Web frontend               | Next.js + TypeScript                                                         |
+| Backend runtime            | Node.js                                                                      |
+| Backend language/framework | TypeScript + NestJS                                                          |
+| Application architecture   | Modular monolith                                                             |
+| API                        | REST + JSON                                                                  |
+| API documentation          | OpenAPI / Swagger                                                            |
+| Database                   | PostgreSQL                                                                   |
+| ORM                        | Prisma                                                                       |
+| Styling                    | Tailwind CSS                                                                 |
+| File storage               | Cloudflare R2, behind a provider-independent S3-compatible storage interface |
+| Containers                 | Docker from the beginning                                                    |
+| CI/CD                      | GitHub Actions                                                               |
+| Future cache/queue         | Redis + BullMQ, when justified                                               |
+| Future real-time           | Socket.IO, when required                                                     |
 
 Node.js is the backend runtime; NestJS is the backend framework; TypeScript is the programming language.
 

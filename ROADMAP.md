@@ -1,6 +1,7 @@
 # Roadmap
 
 Status notation:
+
 - `[ ]` Not started
 - `[~]` In progress
 - `[x]` Completed and verified/reviewed
@@ -10,12 +11,14 @@ A planning task is complete only after its acceptance criteria are met and revie
 ## Phase 0 — Product discovery and planning
 
 ### 0.1 Product vision and direction
+
 - [x] Define LMS + IMS product direction.
 - [x] Define Sri Lanka-first launch focus.
 - [x] Define independent teacher and institute customer types.
 - [x] Agree shared SaaS first, white-label later and dedicated enterprise later.
 
 ### 0.2 Customer and competitor desk research
+
 - [~] Desk research into Sri Lankan education workflows and competing products — **deferred; not a development blocker**.
 - [ ] Summarize findings, assumptions, opportunities and risks.
 - [ ] Review research findings and record implications for MVP.
@@ -23,12 +26,14 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria when resumed:** A reviewed desk-research summary with sources, competitor comparison, common workflows, assumptions and product implications. Do not mark complete until reviewed.
 
 ### 0.3 MVP definition
+
 - [x] Agree the full six-module MVP.
 - [x] Include basic parent portal, announcements and basic reports.
 - [x] Record explicit exclusions and later-phase capabilities.
 - **Acceptance criteria:** MVP scope and exclusions documented and approved.
 
 ### 0.4 Requirements and user journeys
+
 - [x] Define roles and key user journeys.
 - [x] Define tenant, parent, student, teacher and branch access rules.
 - [x] Define platform administrator temporary support-access policy.
@@ -36,6 +41,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria:** Requirements and user journeys reviewed and approved.
 
 ### 0.5 Architecture and technology decisions
+
 - [x] 0.5.1 Multi-tenant database strategy — shared PostgreSQL initially; future dedicated database option.
 - [x] 0.5.2 Authentication and membership architecture — global identity, workspace-scoped memberships.
 - [x] 0.5.3 Authorization — configurable permissions, predefined roles, resource and branch restrictions.
@@ -49,6 +55,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria:** Eight decisions and their safeguards are documented; cross-decision review is approved; open detailed-design questions are recorded.
 
 ### 0.6 Implementation readiness and planning close-out
+
 - [x] Review approved requirements and architecture as the baseline for implementation.
 - [x] Agree to begin development without waiting for teacher interviews or completion of desk research.
 - [x] Agree an incremental implementation sequence, starting with repository and development foundations.
@@ -61,6 +68,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 **Goal:** Establish a reproducible local development environment and a maintainable foundation for the approved Next.js + NestJS modular-monolith product.
 
 ### 1.1 Repository tooling and workspace conventions
+
 - [ ] Confirm supported Node.js LTS version and record it in the repository.
 - [ ] Select the package manager and commit its lockfile.
 - [ ] Establish the initial workspace layout for `apps/web`, `apps/api` and shared packages.
@@ -70,6 +78,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria:** A clean clone can install dependencies using the documented command; workspace scripts run; tooling and conventions are documented; no secrets are committed.
 
 ### 1.2 Frontend foundation
+
 - [ ] Create the Next.js + TypeScript application in `apps/web`.
 - [ ] Configure Tailwind CSS.
 - [ ] Add a minimal accessible application shell and initial placeholder page.
@@ -77,6 +86,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria:** The frontend starts locally and produces a successful production build; lint and type checks pass.
 
 ### 1.3 Backend foundation
+
 - [ ] Create the NestJS + TypeScript application in `apps/api`.
 - [ ] Establish modular folder conventions and configuration validation.
 - [ ] Add a basic health endpoint.
@@ -86,6 +96,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria:** The API starts locally; the health endpoint responds; Swagger is available in development; checks pass.
 
 ### 1.4 Local database and Prisma foundation
+
 - [ ] Add Docker Compose configuration for local PostgreSQL.
 - [ ] Configure environment-variable examples without real credentials.
 - [ ] Add Prisma and connect it to local PostgreSQL.
@@ -94,12 +105,14 @@ A planning task is complete only after its acceptance criteria are met and revie
 - **Acceptance criteria:** A developer can start the local database, apply migrations and connect the API using documented commands; secrets remain outside version control.
 
 ### 1.5 Continuous integration and developer documentation
+
 - [ ] Add GitHub Actions checks for install, formatting/lint, type checks, tests and builds as applicable.
 - [ ] Document local setup, required tools, environment configuration and common commands.
 - [ ] Verify the workflow on the Phase 1 branch and review its results.
 - **Acceptance criteria:** CI runs successfully for a pull request; a fresh local setup can follow the documentation without undocumented steps.
 
 ### Phase 1 exit criteria
+
 - Frontend and backend applications build and run locally.
 - Local PostgreSQL and Prisma migrations work reproducibly.
 - Repository quality checks and CI pass.

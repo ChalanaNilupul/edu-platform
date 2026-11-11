@@ -14,12 +14,15 @@ Initial languages: English, Sinhala and Tamil. Initial currency: LKR. Internatio
 ## 2. Customer and service models
 
 ### Shared SaaS — first delivery model
+
 Anyone can register and create workspaces. The platform operator manages central application infrastructure, database and storage. Workspace data and files are isolated. Customers use the platform domain.
 
 ### White-label SaaS — planned for later
+
 The same core platform can support customer-specific name, logo, colors and custom domain while remaining on shared infrastructure. A custom domain does not automatically mean a separate deployment.
 
 ### Dedicated enterprise — planned for later
+
 Selected customers may receive a separate application deployment, database and storage, custom domain/branding and support arrangements.
 
 ## 3. Onboarding paths
@@ -32,18 +35,21 @@ Both paths use the same multi-tenant platform and authorization foundations.
 ## 4. Approved MVP scope
 
 ### 4.1 Student and teacher management
+
 - Student and teacher/staff profiles.
 - Parent/guardian details and links.
 - Student enrollment.
 - Validated CSV import.
 
 ### 4.2 Class and batch management
+
 - Subjects, classes and batches.
 - Teacher assignments.
 - Timetables and schedules.
 - Branch-aware organization.
 
 ### 4.3 Attendance and finance
+
 - Manual attendance.
 - Monthly fee structures.
 - Cash and bank payment records.
@@ -51,12 +57,14 @@ Both paths use the same multi-tenant platform and authorization foundations.
 - Receipts and payment history.
 
 ### 4.4 Learning management
+
 - Lessons and learning resources.
 - PDF and video resources.
 - Assignments and submissions.
 - Teacher feedback and marking.
 
 ### 4.5 Examinations
+
 - Question bank.
 - Multiple-choice and true/false questions.
 - Timed examinations.
@@ -64,6 +72,7 @@ Both paths use the same multi-tenant platform and authorization foundations.
 - Results and rankings.
 
 ### 4.6 Student portal
+
 - Student login.
 - Enrolled classes.
 - Learning materials.
@@ -71,16 +80,19 @@ Both paths use the same multi-tenant platform and authorization foundations.
 - Attendance and results.
 
 ### 4.7 Basic parent portal
+
 - Parent login.
 - Linked children.
 - Attendance, results and fee status.
 - Announcements.
 
 ### 4.8 Announcements and notifications
+
 - In-app notifications.
 - Audience targeting.
 
 ### 4.9 Basic reports
+
 - Student and enrollment reports.
 - Attendance reports.
 - Examination and performance reports.
@@ -89,6 +101,7 @@ Both paths use the same multi-tenant platform and authorization foundations.
 ## 5. Roles and security requirements
 
 Roles:
+
 - Platform administrator.
 - Institute/workspace owner.
 - Institute administrator.
@@ -99,6 +112,7 @@ Roles:
 - Parent/guardian.
 
 Security rules:
+
 - Enforce tenant boundaries server-side; never trust client-supplied tenant IDs without validating authenticated membership.
 - Parents access only explicitly linked children.
 - Students access only their own permitted records.

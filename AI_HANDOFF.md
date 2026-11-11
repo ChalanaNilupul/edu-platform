@@ -23,6 +23,7 @@
 ## Immediate next task
 
 Complete Phase 1.1 before generating application projects:
+
 1. Confirm a supported Node.js LTS version.
 2. Select the package manager and lockfile strategy.
 3. Agree the initial workspace/monorepo layout.
@@ -68,6 +69,7 @@ See `ARCHITECTURE.md` for the full baseline and safeguards.
 ## Open detailed-design questions
 
 Do not invent answers. Resolve them before the relevant implementation:
+
 - Exact managed cloud provider, region and service plans.
 - Exact managed PostgreSQL provider and backup/PITR/recovery objectives.
 - Cookie-based session versus access/refresh token implementation.

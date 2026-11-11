@@ -33,10 +33,13 @@ edu-platform/
 ## Application boundaries
 
 ### `apps/web`
+
 Role-based browser experience for platform administrators, institute owners, teachers, students and parents. Organize features by domain rather than putting the entire app into one large components folder.
 
 ### `apps/api`
+
 Backend modules should follow business domains, for example:
+
 - identity and access
 - tenants and memberships
 - people and guardians
@@ -49,9 +52,11 @@ Backend modules should follow business domains, for example:
 - subscriptions and platform administration
 
 ### `packages/shared`
+
 Only put genuinely shared, platform-independent types or validation schemas here. Avoid coupling the web app directly to database models.
 
 ### `apps/mobile`
+
 Add when the mobile phase begins. Prefer separate role experiences only if product requirements justify separate apps; decide this during mobile planning.
 
 ## Important architecture rule
