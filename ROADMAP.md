@@ -87,12 +87,12 @@ A planning task is complete only after its acceptance criteria are met and revie
 
 ### 1.3 Backend foundation
 
-- [ ] Create the NestJS + TypeScript application in `apps/api`.
-- [ ] Establish modular folder conventions and configuration validation.
-- [ ] Add a basic health endpoint.
-- [ ] Set the API global prefix to `/api/v1`.
-- [ ] Add initial OpenAPI/Swagger setup.
-- [ ] Add backend development, build, lint, type-check and test scripts.
+- [x] Create the NestJS + TypeScript application in `apps/api`.
+- [x] Establish modular folder conventions and configuration validation.
+- [x] Add a basic health endpoint.
+- [x] Set the API global prefix to `/api/v1`.
+- [x] Add initial OpenAPI/Swagger setup.
+- [x] Add backend development, build, lint, type-check and test scripts.
 - **Acceptance criteria:** The API starts locally; the health endpoint responds; Swagger is available in development; checks pass.
 
 ### 1.4 Local database and Prisma foundation
