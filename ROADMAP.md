@@ -106,9 +106,9 @@ A planning task is complete only after its acceptance criteria are met and revie
 
 ### 1.5 Continuous integration and developer documentation
 
-- [ ] Add GitHub Actions checks for install, formatting/lint, type checks, tests and builds as applicable.
-- [ ] Document local setup, required tools, environment configuration and common commands.
-- [ ] Verify the workflow on the Phase 1 branch and review its results.
+- [x] Add GitHub Actions checks for install, formatting/lint, type checks, tests and builds as applicable.
+- [x] Document local setup, required tools, environment configuration and common commands.
+- [x] Verify the workflow on the Phase 1 branch and review its results.
 - **Acceptance criteria:** CI runs successfully for a pull request; a fresh local setup can follow the documentation without undocumented steps.
 
 ### Phase 1 exit criteria
