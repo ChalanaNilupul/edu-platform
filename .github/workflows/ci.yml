@@ -1,0 +1,47 @@
+name: EduPlatform CI
+
+on:
+  push:
+    branches:
+      - main
+      - feat/phase-1-foundation
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  checks:
+    name: Code Quality and Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '12.18.0'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        run: pnpm exec prisma generate
+        env:
+          DATABASE_URL: postgresql://edu_admin:ci_password@localhost:5432/edu_platform?schema=public
+
+      - name: Run type checks
+        run: pnpm typecheck
+
+      - name: Run lint checks
+        run: pnpm lint
+
+      - name: Build applications
+        run: pnpm build
