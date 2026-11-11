@@ -64,7 +64,7 @@ A planning task is complete only after its acceptance criteria are met and revie
 
 ## Phase 1 — Repository and development foundation
 
-**Status:** In progress  
+**Status:** Completed  
 **Goal:** Establish a reproducible local development environment and a maintainable foundation for the approved Next.js + NestJS modular-monolith product.
 
 ### 1.1 Repository tooling and workspace conventions
@@ -119,11 +119,65 @@ A planning task is complete only after its acceptance criteria are met and revie
 - Actual repository structure and setup instructions are documented.
 - Production cloud deployment, real customer data, Redis/BullMQ and Socket.IO are not required for this phase.
 
+## Phase 2 — Identity, workspaces and tenant security
+
+**Status:** In progress
+
+**Goal:** Implement secure user authentication, workspace management, memberships, invitations, and tenant isolation.
+
+### 2.1 Identity database foundation
+
+- [x] Create User, Workspace and Membership Prisma models.
+- [x] Create Session model for database-backed authentication.
+- [x] Create and apply database migrations.
+- [x] Generate Prisma Client and verify TypeScript checks.
+
+### 2.2 Authentication implementation
+
+- [x] Implement user registration with password hashing.
+- [x] Implement login with email and password.
+- [x] Implement secure random session tokens.
+- [x] Store hashed session tokens in PostgreSQL.
+- [x] Configure HTTP-only session cookies.
+- [x] Implement `/auth/me` for session verification.
+- [x] Implement logout and session invalidation.
+- [x] Add DTO validation and cookie parsing.
+- [x] Add initial login rate limiting and Origin checking.
+- [x] Verify lint, typecheck, build and GitHub Actions.
+
+### 2.3 Authentication security and remaining features
+
+- [ ] Complete runtime testing of rate limiting and Origin checking.
+- [ ] Implement and verify stronger CSRF protection.
+- [ ] Implement email verification.
+- [ ] Implement password reset.
+- [ ] Add automated authentication tests and review security.
+
+### 2.4 Workspace management
+
+- [ ] Implement teacher workspace creation.
+- [ ] Implement institute workspace creation.
+- [ ] Implement workspace memberships.
+- [ ] Implement workspace listing and switching.
+
+### 2.5 Invitations and tenant isolation
+
+- [ ] Implement workspace invitations.
+- [ ] Implement tenant context resolution.
+- [ ] Enforce tenant-scoped database access.
+- [ ] Test cross-workspace access restrictions.
+
+### Phase 2 exit criteria
+
+- [ ] Authentication and security tests pass.
+- [ ] Workspace and membership functionality is verified.
+- [ ] Tenant isolation is implemented and tested.
+- [ ] Phase 2 is reviewed and ready to merge into main.
+
 ## Later implementation phases
 
 Detailed task breakdowns and acceptance criteria will be refined when the foundation is ready.
 
-1. **Phase 2 — Identity, workspaces and tenant security:** authentication, users, workspaces, memberships, invitations, tenant context and database isolation safeguards.
 2. **Phase 3 — Authorization and organization structure:** roles, permissions, branches and resource-level access controls.
 3. **Phase 4 — Core academic management:** students, teachers, subjects, classes, batches and enrollment.
 4. **Phase 5 — Attendance and finance:** attendance, fee structures, payment records, receipts and balances.
