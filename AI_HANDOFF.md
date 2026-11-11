@@ -11,12 +11,26 @@
 
 ## Current status
 
+- **Current phase:** Phase 1 — Repository and development foundation.
+- **Current task:** Phase 1.1 — Establish repository tooling and workspace conventions.
 - Phase 0.4 requirements and user journeys approved and documented.
-- Phase 0.2 desk research remains in progress.
-- Phase 0.5 architecture decisions 0.5.1–0.5.8 approved.
-- Consolidated architecture baseline approved on 2026-11-11.
-- This documentation package prepares `ARCHITECTURE.md` and updates `README.md`, `ROADMAP.md`, `REQUIREMENTS.md` and this handoff.
-- Do not claim these local documentation files have been pushed or merged. The user must copy them into the repository and commit/push.
+- Phase 0.5 architecture decisions 0.5.1–0.5.8 approved; consolidated architecture baseline approved on 2026-11-11.
+- Phase 0.6 implementation readiness reviewed. Development is authorized to proceed.
+- Phase 0.2 customer/competitor desk research is deferred, not completed. Teacher interviews are not a prerequisite. Revisit desk research and prototype validation after an initial working prototype.
+- Current working branch: `feat/phase-1-foundation`. Confirm the actual local branch and Git status before making changes.
+- The branch was published to `origin`; do not assume later commits have been pushed or merged without checking.
+
+## Immediate next task
+
+Complete Phase 1.1 before generating application projects:
+
+1. Confirm a supported Node.js LTS version.
+2. Select the package manager and lockfile strategy.
+3. Agree the initial workspace/monorepo layout.
+4. Establish shared TypeScript, linting and formatting conventions.
+5. Update `PROJECT_STRUCTURE.md` to reflect the actual agreed layout.
+
+Make one technical decision at a time when user approval is needed. Explain the recommendation and trade-offs. Do not silently introduce additional infrastructure or tooling.
 
 ## Approved MVP
 
@@ -55,6 +69,7 @@ See `ARCHITECTURE.md` for the full baseline and safeguards.
 ## Open detailed-design questions
 
 Do not invent answers. Resolve them before the relevant implementation:
+
 - Exact managed cloud provider, region and service plans.
 - Exact managed PostgreSQL provider and backup/PITR/recovery objectives.
 - Cookie-based session versus access/refresh token implementation.
@@ -68,14 +83,22 @@ Do not invent answers. Resolve them before the relevant implementation:
 
 1. Before working on any computer, run `git pull`.
 2. Work on one computer at a time.
-3. Use task branches where practical.
-4. Review diffs and run relevant tests/checks before merge.
+3. Use task branches; do not develop directly on `main`.
+4. Review diffs and run relevant formatting, lint, type-check, test and build commands before merge.
 5. Update docs whenever approved decisions or verified implementation status changes.
 6. Never commit secrets, credentials, student personal data or production exports.
 7. Do not mark implementation complete until implemented, checked and reviewed.
 8. Be transparent about GitHub access; never claim a push/merge without confirmation.
-9. The existing `PROJECT_STRUCTURE.md` must be preserved. This package intentionally does not replace it.
+9. Preserve existing project files and inspect them before replacing or restructuring.
+10. Prefer the simplest solution consistent with the approved architecture; do not add Redis, BullMQ, microservices or cloud infrastructure prematurely.
 
-## Next action
+## Phase 1 sequence
 
-Copy the updated documentation files into the repository, review the diff (especially against any newer local edits), then commit and merge manually. After that, continue Phase 0 planning, including the still-open desk research and implementation-readiness work. Do not start coding solely because architecture approval is complete.
+1. Repository tooling and workspace conventions.
+2. Next.js frontend foundation.
+3. NestJS backend foundation.
+4. Docker-based local PostgreSQL and Prisma setup.
+5. Initial API health check, validation and OpenAPI setup.
+6. GitHub Actions checks and documented local development workflow.
+
+See `ROADMAP.md` for task breakdowns and acceptance criteria.
