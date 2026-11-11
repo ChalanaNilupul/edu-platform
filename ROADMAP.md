@@ -1,171 +1,193 @@
 # Product Roadmap
 
-This roadmap is a working plan. Scope and ordering may change after discovery. Do not mark a task complete until it is implemented (where applicable), checked and reviewed.
+This roadmap is the working plan for Edu Platform, a Sri Lanka-first, multi-tenant SaaS LMS + IMS for independent tuition teachers and educational institutes.
 
-Status: `[ ]` not started · `[~]` in progress · `[x]` completed and verified · `[!]` blocked
+Status: `[ ]` not started · `[~]` in progress · `[x]` completed and reviewed · `[!]` blocked
+
+**MVP labels:** `[MVP]` required for the approved first release; `[Later]` planned after the first release; `[Future]` optional/future exploration. A task is not complete merely because it is included in the MVP scope.
 
 ## Phase 0 — Product discovery and planning
 
-- [~] **0.1 Product vision and target customers**
-  - Define the product as a SaaS LMS + IMS for individual tuition teachers and institutes.
-  - Acceptance: vision, customer groups and initial problem statement are documented.
-- [ ] **0.2 Customer and competitor research**
-  - Interview tuition teachers, institute owners/managers, students and parents.
-  - Acceptance: findings, recurring pain points and evidence are recorded.
-- [ ] **0.3 MVP scope and release priorities**
-  - Separate must-have MVP features from later enhancements.
-  - Acceptance: prioritized MVP backlog and explicit exclusions are documented.
-- [ ] **0.4 Requirements and user journeys**
-  - Map onboarding and key workflows for platform admin, institute owner, teacher, student and parent.
-  - Acceptance: role permissions and primary journeys are documented.
+- [x] **0.1 Product vision and target customers**
+  - Define the product as a SaaS LMS + IMS for independent tuition teachers and institutes.
+  - Initial market: Sri Lanka; planned languages: English, Sinhala and Tamil; initial currency: LKR.
+  - Acceptance: vision, customer groups and initial market direction are documented and approved.
+- [~] **0.2 Customer and competitor research**
+  - Use desk research: competitor product pages, public documentation, public reviews and common tuition/institute workflows.
+  - Build realistic teacher, institute, student and parent scenarios. Teacher interviews are not a dependency.
+  - Acceptance: findings, recurring pain points, competitor comparison and assumptions are recorded with sources.
+- [x] **0.3 MVP scope and release priorities**
+  - Approved full six-module MVP plus parent portal, announcements/notifications and basic reports.
+  - Acceptance: prioritized MVP scope, onboarding paths and explicit first-release exclusions are documented.
+- [~] **0.4 Requirements and user journeys**
+  - Define roles, permissions, onboarding and key journeys for platform admin, independent teacher, institute owner/admin, teacher/staff, student and parent/guardian.
+  - Acceptance: role-permission matrix, primary user journeys, key business rules and edge cases are documented.
 - [ ] **0.5 Architecture and technology decisions**
-  - Confirm stack, tenant model, deployment assumptions and integrations.
+  - Confirm stack, tenant model, deployment assumptions, file storage, notification strategy and integrations.
   - Acceptance: decisions and trade-offs are recorded in architecture decision records.
 
-## Phase 1 — Repository and engineering foundation
+## Approved first-release scope
 
-- [ ] 1.1 Confirm monorepo structure and tooling
-- [ ] 1.2 Add formatting, linting and type-checking
-- [ ] 1.3 Establish environment configuration and secret handling
-- [ ] 1.4 Add local development environment and Docker setup
-- [ ] 1.5 Add CI checks and contribution workflow
+### Onboarding and access foundation
 
-## Phase 2 — Authentication and multi-tenancy
+- [MVP] Independent teacher onboarding without requiring an institute.
+- [MVP] Institute onboarding with organization setup, branch support and staff invitations.
+- [MVP] Secure authentication, tenant/workspace isolation and role-based permissions.
+- [MVP] Platform administrator capabilities needed to operate and support the SaaS.
 
-- [ ] 2.1 Authentication, sessions and account recovery
-- [ ] 2.2 Tenant/workspace creation and onboarding
-- [ ] 2.3 Tenant isolation strategy and automated security tests
-- [ ] 2.4 Role-based access control
-- [ ] 2.5 Invitations and membership management
-- [ ] 2.6 Audit logging for sensitive actions
+### Module 1 — Student and teacher management
 
-## Phase 3 — Dashboards and core navigation
+- [MVP] Student profiles and enrollment.
+- [MVP] Teacher and staff profiles.
+- [MVP] Parent/guardian details and student-to-guardian relationships.
+- [MVP] Validated CSV import for relevant records.
+- [MVP] Search, filtering and record history appropriate to each role.
 
-- [ ] 3.1 Platform administrator dashboard
-- [ ] 3.2 Institute owner dashboard
-- [ ] 3.3 Teacher dashboard
-- [ ] 3.4 Student dashboard
-- [ ] 3.5 Parent dashboard
-- [ ] 3.6 Responsive navigation and accessibility baseline
+### Module 2 — Class and batch management
 
-## Phase 4 — People and organization management
+- [MVP] Subjects and class/course catalog.
+- [MVP] Classes and batches.
+- [MVP] Teacher assignments and student enrollments.
+- [MVP] Timetables and schedules.
+- [MVP] Visibility rules so users only see relevant classes and batches.
 
-- [ ] 4.1 Student profiles and enrollment
-- [ ] 4.2 Teacher and staff profiles
-- [ ] 4.3 Guardians and parent relationships
-- [ ] 4.4 Branches, departments and groups
-- [ ] 4.5 Bulk import/export with validation
+### Module 3 — Attendance and finance
 
-## Phase 5 — Classes, batches and courses
+- [MVP] Manual attendance marking and attendance history.
+- [MVP] Monthly fee structures and student fee balances.
+- [MVP] Cash and bank payment recording, including payment date and reference/details.
+- [MVP] Outstanding balance tracking and payment history.
+- [MVP] Receipts or downloadable payment records.
+- [Later] QR-based attendance, after abuse-prevention design.
+- [Later] Online payment gateway integration, after provider and compliance review.
+- [Later] Advanced accounting, payroll and automated reconciliation.
 
-- [ ] 5.1 Subjects and course catalog
-- [ ] 5.2 Classes and batches
-- [ ] 5.3 Teacher assignments and enrollments
-- [ ] 5.4 Timetables and schedules
-- [ ] 5.5 Course and batch visibility rules
+### Module 4 — Learning management
 
-## Phase 6 — Learning management system
+- [MVP] Course/class sections and lessons.
+- [MVP] PDF and video learning resources (video upload or supported links to be decided in technical design).
+- [MVP] Assignments and student submissions.
+- [MVP] Teacher feedback and marking.
+- [MVP] Basic learning progress visibility.
+- [Later] Advanced course authoring and certificate workflows.
 
-- [ ] 6.1 Course sections and lessons
-- [ ] 6.2 PDF, video and downloadable learning resources
-- [ ] 6.3 Assignments and submissions
-- [ ] 6.4 Teacher feedback and marking
-- [ ] 6.5 Learning progress tracking
-- [ ] 6.6 Completion records and certificates
+### Module 5 — Examinations
 
-## Phase 7 — Exams and question bank
+- [MVP] Question bank with categories.
+- [MVP] MCQ and true/false question types.
+- [MVP] Timed exams and basic attempt rules.
+- [MVP] Automatic marking for supported objective question types.
+- [MVP] Results and class/batch rankings.
+- [Later] Rich structured-question marking workflows and advanced exam analytics.
 
-- [ ] 7.1 Question bank with categories and difficulty levels
-- [ ] 7.2 MCQ, true/false and structured question types
-- [ ] 7.3 Timed exams and attempt rules
-- [ ] 7.4 Automatic and manual marking
-- [ ] 7.5 Results, rankings and performance reports
+### Module 6 — Student portal
 
-## Phase 8 — Attendance and institute operations
+- [MVP] Secure student login.
+- [MVP] Enrolled classes and schedules.
+- [MVP] Access to permitted learning resources.
+- [MVP] Assignment instructions and submission.
+- [MVP] Exam participation, results and rankings.
+- [MVP] Attendance and relevant learning progress.
 
-- [ ] 8.1 Manual attendance
-- [ ] 8.2 QR-based attendance (subject to abuse prevention)
-- [ ] 8.3 Attendance history and reports
-- [ ] 8.4 Staff and branch operations
+### Additional first-release capability — Parent portal
 
-## Phase 9 — Finance
+- [MVP] Parent/guardian login and secure child linking.
+- [MVP] View linked child's classes and announcements.
+- [MVP] View attendance, examination results and fee status.
+- [MVP] Parent access must be restricted to their linked child/children.
 
-- [ ] 9.1 Fee structures and student balances
-- [ ] 9.2 Payment recording and verification
-- [ ] 9.3 Receipts and downloadable payment slips
-- [ ] 9.4 Discounts, refunds and adjustments
-- [ ] 9.5 Expenses and financial reports
-- [ ] 9.6 Payment gateway integration, after provider and compliance review
+### Additional first-release capability — Announcements and notifications
 
-## Phase 10 — Live classroom and competitions
+- [MVP] Create and publish announcements.
+- [MVP] Target announcements to an organization, branch, class, batch or appropriate user audience.
+- [MVP] In-app notifications for relevant users.
+- [Later] Email, push and SMS delivery integrations.
 
-- [ ] 10.1 Live quiz sessions and join codes
-- [ ] 10.2 Real-time answers, countdowns and leaderboards
-- [ ] 10.3 Polls, Q&A and team activities
-- [ ] 10.4 Interactive whiteboard exploration
-- [ ] 10.5 Session analytics
+### Additional first-release capability — Basic reports
 
-## Phase 11 — Communication and parent portal
+- [MVP] Student/enrollment summaries.
+- [MVP] Attendance summaries.
+- [MVP] Examination results and basic performance summaries.
+- [MVP] Fee collection and outstanding-balance summaries.
+- [MVP] Reports must respect tenant and role permissions.
+- [Later] Advanced analytics, predictive insights and AI-generated reports.
 
-- [ ] 11.1 Announcements and targeted notifications
-- [ ] 11.2 Parent view of attendance, results and progress
-- [ ] 11.3 Fee and class reminders
-- [ ] 11.4 Email, push and SMS integrations
+## Explicitly outside the first release
 
-## Phase 12 — AI capabilities
+- Live video classroom, real-time quiz competitions, leaderboards, polls, Q&A and interactive whiteboard.
+- AI question generation, AI marking assistance, material summarization and predictive student weakness analysis.
+- Native Flutter student, parent and teacher applications (web-first responsive experience for MVP).
+- QR attendance.
+- Online payment gateway integration.
+- Advanced accounting, payroll and tax automation.
+- Full white-label/custom-domain capabilities.
+- International market launch, foreign currencies, country-specific payment providers and compliance workflows.
 
-- [ ] 12.1 Question and quiz generation with teacher review
-- [ ] 12.2 Learning material summarization
-- [ ] 12.3 Answer evaluation assistance
-- [ ] 12.4 Student weakness analysis and recommendations
-- [ ] 12.5 Teacher assistant and report generation
-- [ ] 12.6 AI safety, privacy, cost controls and usage limits
+The architecture should be extensible for future countries, currencies, languages, time zones and providers, without implementing all international requirements in the Sri Lankan MVP.
 
-## Phase 13 — SaaS subscriptions and platform administration
+## Later product releases
 
-- [ ] 13.1 Subscription plans and trials
-- [ ] 13.2 Renewals, expiry and plan changes
-- [ ] 13.3 Feature and usage limits
-- [ ] 13.4 Billing history and platform revenue reports
-- [ ] 13.5 Tenant suspension and reactivation workflows
+### Release 2 — Engagement and intelligence
 
-## Phase 14 — Branding and localization
+- [Later] Live quiz sessions, join codes, real-time answers and leaderboards.
+- [Later] Polls, Q&A and interactive classroom features.
+- [Later] AI-assisted question generation, summarization and teacher workflows, with human review.
+- [Later] Advanced student performance and weakness analysis.
+- [Later] Parent reminders and expanded communication channels.
+- [Later] Online payment integration and QR attendance, subject to design and validation.
 
-- [ ] 14.1 Tenant logo and theme customization
-- [ ] 14.2 Sinhala, Tamil and English localization
-- [ ] 14.3 Time zone, currency, date and number formatting
-- [ ] 14.4 Custom domains and white-label options
+### Release 3 — Mobile applications
 
-## Phase 15 — Mobile applications
+- [Later] Flutter student app.
+- [Later] Flutter parent app.
+- [Later] Flutter teacher app.
+- [Later] Push notifications and offline access to permitted resources.
 
-- [ ] 15.1 Student mobile app
-- [ ] 15.2 Parent mobile app
-- [ ] 15.3 Teacher mobile app
-- [ ] 15.4 Push notifications and secure authentication
-- [ ] 15.5 Offline access to permitted learning materials
+### Future — International expansion
 
-## Phase 16 — Quality, security and production
+- [Future] Additional currencies, locales, time zones and country settings.
+- [Future] Country-specific payment providers, tax and compliance support.
+- [Future] International rollout after validating the Sri Lankan product.
 
-- [ ] 16.1 Unit, integration, API and end-to-end tests
-- [ ] 16.2 Tenant-isolation and authorization security testing
-- [ ] 16.3 Performance and load testing
-- [ ] 16.4 Backups and recovery drills
-- [ ] 16.5 Monitoring, logging and alerting
-- [ ] 16.6 Production deployment, domain and TLS
-- [ ] 16.7 Operational readiness and release checklist
+## Remaining engineering phases
 
-## MVP candidate
+- [ ] **Phase 1 — Repository and engineering foundation**
+  - Monorepo structure, formatting/linting/type-checking, environment configuration, Docker and CI.
+- [ ] **Phase 2 — Authentication and multi-tenancy**
+  - Authentication, tenant onboarding, tenant isolation tests, RBAC, invitations and audit logs.
+- [ ] **Phase 3 — Dashboards and core navigation**
+  - Role-specific dashboards and responsive navigation.
+- [ ] **Phase 4 — People and organization management**
+  - Student, teacher, staff, guardian, branch and import workflows.
+- [ ] **Phase 5 — Classes, batches and courses**
+  - Subjects, classes, batches, assignments, enrollments and schedules.
+- [ ] **Phase 6 — Learning management system**
+  - Lessons, resources, assignments, submissions, feedback and progress.
+- [ ] **Phase 7 — Exams and question bank**
+  - Question authoring, exam attempts, marking and results.
+- [ ] **Phase 8 — Attendance and institute operations**
+  - Manual attendance, history and operational workflows.
+- [ ] **Phase 9 — Finance**
+  - Fees, payments, receipts and financial summaries.
+- [ ] **Phase 10 — Live classroom and competitions [Later]**
+- [ ] **Phase 11 — Communication and parent portal**
+  - MVP parent portal and announcements are first-release requirements; later delivery channels and reminders remain follow-on work.
+- [ ] **Phase 12 — AI capabilities [Later]**
+- [ ] **Phase 13 — SaaS subscriptions and platform administration**
+- [ ] **Phase 14 — Branding and localization**
+  - MVP must be prepared for English/Sinhala/Tamil and LKR; advanced branding and international localization can follow.
+- [ ] **Phase 15 — Mobile applications [Later]**
+- [ ] **Phase 16 — Quality, security and production**
+  - Automated tests, tenant isolation, performance, backups, monitoring and release readiness.
 
-The initial MVP should be confirmed during Phase 0. A reasonable candidate is:
+## Release acceptance principles
 
-- Tenant/workspace onboarding and secure role-based access
-- Student, teacher, class, batch and course management
-- Learning materials (PDF/video links)
-- Basic exams/quizzes with automatic marking
-- Attendance
-- Fee and payment records
-- Student portal for materials, exams, results and progress
-- Institute dashboard and basic reports
-- Platform admin view for tenants and subscription status
+The MVP is ready for release only when:
 
-A simple live quiz may be considered an early differentiator, but should not delay validating the core workflows.
+1. An independent teacher can onboard and run classes without creating an institute.
+2. An institute can onboard, manage branches and invite staff.
+3. Tenant boundaries and role permissions are tested, including attempts to access another tenant's records.
+4. Core student, class, learning, exam, attendance and finance workflows work end-to-end.
+5. Students and parents can access only the information they are authorized to see.
+6. Announcements, notifications and basic reports work within tenant and role boundaries.
+7. Relevant automated tests, security checks and release checks pass.
