@@ -97,11 +97,11 @@ A planning task is complete only after its acceptance criteria are met and revie
 
 ### 1.4 Local database and Prisma foundation
 
-- [ ] Add Docker Compose configuration for local PostgreSQL.
-- [ ] Configure environment-variable examples without real credentials.
-- [ ] Add Prisma and connect it to local PostgreSQL.
-- [ ] Create and verify the initial database migration.
-- [ ] Document database start, migration and reset workflows.
+- [x] Add Docker Compose configuration for local PostgreSQL.
+- [x] Configure environment-variable examples without real credentials.
+- [x] Add Prisma and connect it to local PostgreSQL.
+- [x] Create and verify the initial database migration.
+- [x] Document database start, migration and reset workflows.
 - **Acceptance criteria:** A developer can start the local database, apply migrations and connect the API using documented commands; secrets remain outside version control.
 
 ### 1.5 Continuous integration and developer documentation
