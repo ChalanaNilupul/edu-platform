@@ -36,3 +36,13 @@ Thumbs.db
 *.db
 *.dump
 *.sql.gz
+
+
+# Prisma generated client
+apps/api/src/generated/prisma/
+
+# Prisma-generated agent skills
+apps/api/.agents/
+apps/api/.claude/
+apps/api/.cursor/
+apps/api/.devin/
