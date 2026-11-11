@@ -69,20 +69,20 @@ A planning task is complete only after its acceptance criteria are met and revie
 
 ### 1.1 Repository tooling and workspace conventions
 
-- [ ] Confirm supported Node.js LTS version and record it in the repository.
-- [ ] Select the package manager and commit its lockfile.
-- [ ] Establish the initial workspace layout for `apps/web`, `apps/api` and shared packages.
-- [ ] Configure root scripts and consistent TypeScript conventions.
-- [ ] Configure formatting and linting for the repository.
-- [ ] Update `PROJECT_STRUCTURE.md` to match the actual structure.
+- [x] Confirm supported Node.js LTS version and record it in the repository.
+- [x] Select the package manager and commit its lockfile.
+- [x] Establish the initial workspace layout for `apps/web`, `apps/api` and shared packages.
+- [x] Configure root scripts and consistent TypeScript conventions.
+- [x] Configure formatting and linting for the repository.
+- [x] Update `PROJECT_STRUCTURE.md` to match the actual structure.
 - **Acceptance criteria:** A clean clone can install dependencies using the documented command; workspace scripts run; tooling and conventions are documented; no secrets are committed.
 
 ### 1.2 Frontend foundation
 
-- [ ] Create the Next.js + TypeScript application in `apps/web`.
-- [ ] Configure Tailwind CSS.
-- [ ] Add a minimal accessible application shell and initial placeholder page.
-- [ ] Add frontend development, build, lint and type-check scripts.
+- [x] Create the Next.js + TypeScript application in `apps/web`.
+- [x] Configure Tailwind CSS.
+- [x] Add a minimal accessible application shell and initial placeholder page.
+- [x] Add frontend development, build, lint and type-check scripts.
 - **Acceptance criteria:** The frontend starts locally and produces a successful production build; lint and type checks pass.
 
 ### 1.3 Backend foundation
