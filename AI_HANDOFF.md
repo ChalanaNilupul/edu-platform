@@ -1,95 +1,81 @@
-# AI Handoff — Edu Platform
+# AI Handoff — Education SaaS Platform
 
-Read this file, `README.md`, `ROADMAP.md` and `PROJECT_STRUCTURE.md` before making project changes. Treat the repository as the source of truth; do not assume a feature is implemented because it was discussed or included in the approved scope.
+## Project identity
 
-## Product context
-
-Edu Platform is a Sri Lanka-first, multi-tenant SaaS LMS + IMS for independent tuition teachers and larger educational institutes.
-
-- Initial market: Sri Lanka.
+- Product: Sri Lanka-first Education SaaS platform combining LMS + IMS.
+- Repository: `https://github.com/ChalanaNilupul/edu-platform.git`
+- Primary market: Sri Lanka.
+- Initial languages: English, Sinhala and Tamil.
 - Initial currency: LKR.
-- Planned initial languages: English, Sinhala and Tamil.
-- Future international expansion is planned, but is not part of the MVP launch.
-- Customer types: independent tuition teachers and institutes, including multi-branch organizations.
+- Product serves independent teachers and educational institutes, including multi-branch organizations.
 
-### Approved MVP
+## Current status
 
-The user approved the **full six-module MVP**, with three additional first-release capabilities:
+- Phase 0.4 requirements and user journeys approved and documented.
+- Phase 0.2 desk research remains in progress.
+- Phase 0.5 architecture decisions 0.5.1–0.5.8 approved.
+- Consolidated architecture baseline approved on 2026-11-11.
+- This documentation package prepares `ARCHITECTURE.md` and updates `README.md`, `ROADMAP.md`, `REQUIREMENTS.md` and this handoff.
+- Do not claim these local documentation files have been pushed or merged. The user must copy them into the repository and commit/push.
 
-1. Student and teacher management: profiles, guardian details, enrollment and CSV import.
-2. Class and batch management: subjects, classes, batches, teacher assignments and schedules.
-3. Attendance and finance: manual attendance, monthly fees, cash/bank payment records, outstanding balances, receipts and payment history.
-4. LMS: lessons, PDF/video resources, assignments, submissions and teacher feedback.
-5. Examinations: question bank, MCQ/true-false, timed exams, automatic marking, results and rankings.
-6. Student portal: enrolled classes, resources, assignments, exams, attendance and results.
-7. Basic parent portal: linked children, attendance, results, fee status and announcements.
-8. Announcements and in-app notifications with audience targeting.
-9. Basic student, attendance, examination and financial reports.
+## Approved MVP
 
-### Onboarding models
+1. Student and teacher management.
+2. Class and batch management.
+3. Attendance and finance.
+4. Learning management.
+5. Examinations.
+6. Student portal.
+7. Basic parent portal.
+8. Announcements and in-app notifications.
+9. Basic reports.
 
-- Independent teacher: create account/workspace, create classes and add students without an institute.
-- Institute: create organization, configure branches, invite staff and manage multiple teachers.
+Explicit MVP exclusions include live classrooms, AI features, online payment gateway, QR attendance, native mobile apps, advanced accounting/payroll, full white-label implementation, dedicated enterprise deployments and international market/payment/compliance support.
 
-Both are supported by the same platform. Tenant boundaries and role permissions must be enforced server-side.
+## Approved service models
 
-### Explicit MVP exclusions
+1. Shared SaaS first: centrally managed app, shared PostgreSQL and storage with strict tenant isolation.
+2. White-label SaaS later: same core platform, custom branding/domain, shared infrastructure.
+3. Dedicated enterprise later: separate application deployment, database and storage as required.
 
-Do not silently add these to MVP: live video classrooms, live quiz competitions/leaderboards, polls and interactive whiteboards; AI generation/summarization/predictive analysis; online payment gateway; QR attendance; native Flutter apps; advanced accounting/payroll/tax automation; full white-label/custom domains; international market/payment/compliance support.
+## Approved architecture decisions
 
-Keep the architecture extensible, but avoid implementing future-market complexity before it is needed.
+- **Database:** Shared PostgreSQL initially; workspace-owned records have tenant association; server-side membership validation; PostgreSQL RLS as additional protection; future tenant registry and database routing for dedicated customers.
+- **Identity:** One global user identity across workspaces; separate users, workspaces, memberships, roles, permissions and invitations.
+- **Authorization:** Hybrid RBAC plus resource-level and branch-level restrictions; predefined roles and configurable permissions; backend enforcement.
+- **Support access:** Platform admin access to private customer/student data must be temporary, explicitly approved, purpose-limited, scoped, time-limited and audited. No unrestricted default access.
+- **Storage:** Cloudflare R2 initially; provider-independent S3-compatible abstraction; private files; short-lived signed access; quota tracking and metadata in PostgreSQL.
+- **Subscriptions:** Configurable plans, subscriptions and entitlements; manual initial billing; backend enforcement; no deletion of existing data due to limits/expiry.
+- **Application:** Modular monolith; Next.js + TypeScript frontend; Node.js + NestJS + TypeScript backend; PostgreSQL + Prisma; Tailwind; Docker from beginning. Redis/BullMQ deferred until justified; Socket.IO later when required.
+- **Deployment:** Managed cloud hosting, low initial cost, separate frontend/backend services, managed database, one suitable region initially, backups, monitoring, stateless services and future horizontal scaling/dedicated customer infrastructure.
+- **API:** REST + JSON, `/api/v1`, OpenAPI/Swagger, consistent responses/errors, server validation, future scoped external API and webhook support.
 
-## Current state and next task
+See `ARCHITECTURE.md` for the full baseline and safeguards.
 
-- Current phase: **Phase 0 — Product discovery and planning**
-- Current task: **0.4 — Requirements and user journeys**
-- Completed planning decisions: product vision/target customers (0.1) and approved MVP scope (0.3).
-- In progress: 0.2 desk research and competitor analysis. The user cannot conduct teacher interviews; do not make interviews a blocker. Use public competitor information, public reviews/documentation, common workflows and realistic teacher/institute/student/parent scenarios.
-- Next action: create the role-permission matrix and map the main end-to-end journeys for all MVP roles.
-- Do not begin application implementation until requirements and architecture decisions are sufficiently clear.
+## Open detailed-design questions
 
-## Proposed stack — not finalized
+Do not invent answers. Resolve them before the relevant implementation:
+- Exact managed cloud provider, region and service plans.
+- Exact managed PostgreSQL provider and backup/PITR/recovery objectives.
+- Cookie-based session versus access/refresh token implementation.
+- Exact API response envelope, pagination, filtering and sorting conventions.
+- CI/CD release approval and rollback process.
+- External API key lifecycle and webhook event catalogue.
+- File scanning and retention implementation.
+- Monitoring provider and alert thresholds.
 
-Potential direction:
-- Next.js + TypeScript + Tailwind for web.
-- NestJS + TypeScript for API.
-- PostgreSQL + Prisma for persistence.
-- Socket.IO for realtime features when required.
-- Redis for caching/background jobs.
-- S3-compatible object storage.
-- Flutter mobile applications in a later release.
-- Docker for local development and deployment.
+## Collaboration and implementation rules
 
-Confirm the stack, tenant model, deployment assumptions and integrations during Phase 0.5. Do not scaffold the entire stack before that decision.
+1. Before working on any computer, run `git pull`.
+2. Work on one computer at a time.
+3. Use task branches where practical.
+4. Review diffs and run relevant tests/checks before merge.
+5. Update docs whenever approved decisions or verified implementation status changes.
+6. Never commit secrets, credentials, student personal data or production exports.
+7. Do not mark implementation complete until implemented, checked and reviewed.
+8. Be transparent about GitHub access; never claim a push/merge without confirmation.
+9. The existing `PROJECT_STRUCTURE.md` must be preserved. This package intentionally does not replace it.
 
-## Working rules
+## Next action
 
-1. Work in small, verifiable tasks. State the current phase, task ID and next action when guiding the user.
-2. Before changing code, inspect the existing repository and its conventions.
-3. Do not overwrite existing work without checking it first.
-4. Keep tenant identity explicit in authorization and data access. Never trust a tenant ID supplied by a client without validating membership and permissions.
-5. Design authorization tests that attempt cross-tenant access.
-6. Validate inputs at API boundaries and avoid exposing private student information in logs.
-7. Never commit `.env` files, credentials, API keys, real student data or production exports.
-8. Update `ROADMAP.md`, `README.md` and this file when project status materially changes.
-9. Mark a planning task complete only when its documented acceptance criteria are met and reviewed. Mark implementation tasks complete only after implementation, relevant checks and review.
-10. Give Windows PowerShell-friendly commands when providing local setup instructions.
-11. Do not assume the user can interview teachers; use the agreed desk-research approach.
-
-## Git workflow
-
-- Before starting on a computer: `git pull`.
-- Work on one computer at a time; avoid simultaneous edits from office and personal computers.
-- Use a task branch, for example `docs/finalize-mvp-scope` or `task/0.4-user-journeys`.
-- Run relevant checks, update progress documents, commit and push.
-- Merge the completed task branch before switching computers.
-- Never claim a push, commit or deployment succeeded unless the command/tool confirms it.
-- Do not overwrite remote or local changes without reviewing them first.
-
-## Suggested next work
-
-1. Complete desk research using public sources and record findings with source links.
-2. Define roles and permissions for platform admin, independent teacher, institute owner/admin, teacher/staff, student and parent/guardian.
-3. Map onboarding, student enrollment, class setup, attendance, fee payment, learning resource, assignment, exam, parent-view and reporting journeys.
-4. Record key business rules, edge cases and privacy/security requirements.
-5. Proceed to Phase 0.5 architecture decisions only after requirements are reviewed.
+Copy the updated documentation files into the repository, review the diff (especially against any newer local edits), then commit and merge manually. After that, continue Phase 0 planning, including the still-open desk research and implementation-readiness work. Do not start coding solely because architecture approval is complete.
