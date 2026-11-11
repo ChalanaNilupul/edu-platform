@@ -1,7 +1,7 @@
 import { Body, Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
 
 import { AuthService } from './auth.service.js';
-import type { RegisterDto } from './dto/register.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
 
 import { Res, UsePipes, ValidationPipe } from '@nestjs/common';
 import type { Response } from 'express';
@@ -12,6 +12,9 @@ import { LoginDto } from './dto/login.dto.js';
 import { Get, Req } from '@nestjs/common';
 import type { Request } from 'express';
 
+import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { UseGuards } from '@nestjs/common';
+
 @Controller('auth')
 export class AuthController {
   constructor(
@@ -20,9 +23,13 @@ export class AuthController {
   ) {}
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @UsePipes(new ValidationPipe({ expectedType: RegisterDto }))
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
   }
+
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ expectedType: LoginDto }))
@@ -45,13 +52,7 @@ export class AuthController {
 
   @Get('me')
   async me(@Req() request: Request) {
-    const cookieHeader = request.headers.cookie;
-
-    const sessionToken = cookieHeader
-      ?.split(';')
-      .map((cookie) => cookie.trim())
-      .find((cookie) => cookie.startsWith('edu_session='))
-      ?.slice('edu_session='.length);
+    const sessionToken = request.cookies?.edu_session as string | undefined;
 
     return this.authService.getCurrentUser(sessionToken);
   }
@@ -59,11 +60,7 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    const sessionToken = request.headers.cookie
-      ?.split(';')
-      .map((cookie) => cookie.trim())
-      .find((cookie) => cookie.startsWith('edu_session='))
-      ?.slice('edu_session='.length);
+    const sessionToken = request.cookies?.edu_session as string | undefined;
 
     const result = await this.authService.logout(sessionToken);
 
