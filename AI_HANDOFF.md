@@ -11,9 +11,10 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 2 Batch 1 is implemented: workspace roles, memberships, invitations, email verification, password reset, CSRF/security headers, rate limiting and the matching frontend.
 - Phase 2 Batch 2 adds PostgreSQL RLS on `memberships` and `workspace_invitations`, transaction-scoped tenant context, and a real-database integration suite.
 - Phase 2 Batch 3 applies the security review fixes: a restricted runtime database role with a production startup check, required `NODE_ENV`, `TRUST_PROXY` support, a stricter login redirect and a fail-closed roles guard.
-- Verified by 82 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and a successful `next build`.
-- Still open: browser walkthrough, runtime rate-limit/Origin verification, an email-verification enforcement decision, security-event audit logging, and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2) and `8e7bab6` (CI/env fixes) were pushed to `feat/phase-2-rbac-invitations`; Batch 3 is not committed yet.
+- Invitation onboarding is hardened: acceptance requires a verified email address, and the acceptance page guides unverified invitees through verification. Registration now preserves the invitation `next` target.
+- Verified by 83 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and a successful `next build`.
+- Still open: browser walkthrough, runtime rate-limit/Origin verification, email-verification enforcement for other workspace actions, security-event audit logging, and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes) and `90b552b` (hydration fix) were pushed to `feat/phase-2-rbac-invitations`; the invitation-onboarding changes are not committed yet.
 
 ---
 
@@ -199,7 +200,8 @@ Stores pending workspace invitations.
 - Invitation tokens are hashed (SHA-256) before storage; the raw token only exists in the emailed link.
 - Status values: `PENDING`, `ACCEPTED`, `REVOKED`, `EXPIRED`.
 - Seven-day expiry by default.
-- Acceptance requires the signed-in user's email to match the invited email.
+- Acceptance requires the signed-in user's email to match the invited email and the user's email address to be verified.
+- The acceptance page shows an unverified warning, disables acceptance, and offers resend/check-again actions.
 
 ## EmailVerificationToken and PasswordResetToken
 
@@ -234,14 +236,14 @@ Implemented backend functionality:
 
 Implemented frontend functionality:
 
-- Registration page.
+- Registration page (preserves a `next` destination through verification and login).
 - Login page.
 - Protected dashboard.
 - HTTP-only `edu_session` cookie usage.
 - Logout interface.
 - Email verification page.
 - Forgot-password and reset-password pages.
-- Invitation acceptance page.
+- Invitation acceptance page with email-verification guidance for invited users.
 
 Authentication cookie configuration includes:
 
@@ -344,7 +346,7 @@ Current verified results after the Batch 1 and Batch 2 (Phase 2) work:
 
 ## Unit Tests
 
-82 tests passed across 9 files:
+83 tests passed across 9 files:
 
 - Authentication service.
 - Workspace service.
@@ -366,9 +368,9 @@ Current verified results after the Batch 1 and Batch 2 (Phase 2) work:
 
 ## Database Integration Tests
 
-26 tests passed against a real PostgreSQL 17 database:
+27 tests passed against a real PostgreSQL 17 database:
 
-- 19 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle).
+- 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection, cross-tenant update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
@@ -406,7 +408,7 @@ Do not claim unverified checks are complete.
 
 - Verify rate limiting at runtime (configure `TRUST_PROXY` for the deployment topology first).
 - Verify Origin checking at runtime.
-- Decide whether to enforce email verification before workspace actions (security review finding M1).
+- Enforce email verification before workspace actions (security review finding M1). Invitation acceptance now requires a verified email; workspace creation and other actions still allow unverified users.
 - Add structured audit logging for security events such as failed logins, role changes and invitation changes (finding M4).
 - Longer-term: stronger CSRF token scheme if the app adds cross-site embedding.
 - Longer-term: production mail delivery driver (the console driver only logs links).
@@ -488,7 +490,7 @@ Implemented decisions from the Batch 1 work:
 
 - Sessions are database-backed opaque tokens in an HTTP-only `edu_session` cookie. No JWT. This allows immediate revocation on logout, role change or password reset.
 - Session tokens and all email/reset/invitation tokens are stored only as SHA-256 hashes.
-- Email verification uses single-use hashed tokens. Unverified users can still sign in for now; enforcement should be introduced when email-dependent features appear.
+- Email verification uses single-use hashed tokens. Unverified users can still sign in, but accepting a workspace invitation requires a verified address.
 - Password reset revokes all existing sessions for the user.
 - CSRF is mitigated with Origin/Referer validation on unsafe methods combined with SameSite=Lax cookies. A dedicated CSRF token scheme is a later hardening step, not a current blocker.
 - Rate limiting uses NestJS Throttler with a global guard plus tighter per-route overrides on auth endpoints.
@@ -660,7 +662,7 @@ Follow this order:
 
 1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
 2. Verify rate limiting and Origin checking at runtime.
-3. Decide whether to enforce email verification, and add audit logging for security events.
+3. Decide whether to extend email-verification enforcement beyond invitation acceptance, and add audit logging for security events.
 4. Start Phase 3 — Student Management.
 
 Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role and the Phase 2 security review are in place; browser verification, runtime security checks, the email-verification decision and audit logging remain open.

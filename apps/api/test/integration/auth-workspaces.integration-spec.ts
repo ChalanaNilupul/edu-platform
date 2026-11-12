@@ -10,6 +10,7 @@ import {
   post,
   registerAndLogin,
   truncateAll,
+  verifyEmail,
 } from './helpers.js';
 import type { TestContext } from './helpers.js';
 
@@ -221,6 +222,7 @@ describe('EduPlatform database integration', () => {
     it('accepts an invitation, creates the membership and activates the workspace', async () => {
       const owner = await registerAndLogin(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
+      await verifyEmail(context, member.client, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
 
       const invitation = await post(owner.client, `/workspaces/${workspace.id}/invitations`).send({
@@ -274,9 +276,44 @@ describe('EduPlatform database integration', () => {
       expect(await context.prisma.membership.count()).toBe(1);
     });
 
+    it('refuses acceptance until the email address is verified', async () => {
+      const owner = await registerAndLogin(context, 'owner@example.com');
+      const member = await registerAndLogin(context, 'member@example.com');
+      const workspace = await createWorkspace(owner.client, 'Institute');
+
+      const invitation = await post(owner.client, `/workspaces/${workspace.id}/invitations`).send({
+        email: 'member@example.com',
+        role: 'TEACHER',
+      });
+
+      const acceptedWhileUnverified = await post(member.client, '/invitations/accept').send({
+        token: context.mail.invitations[0]!.token,
+      });
+
+      expect(acceptedWhileUnverified.status).toBe(403);
+      expect(
+        (
+          await context.prisma.workspaceInvitation.findUniqueOrThrow({
+            where: { id: invitation.body.id },
+          })
+        ).status,
+      ).toBe('PENDING');
+      expect(await context.prisma.membership.count()).toBe(1);
+
+      await verifyEmail(context, member.client, 'member@example.com');
+
+      const acceptedAfterVerification = await post(member.client, '/invitations/accept').send({
+        token: context.mail.invitations[0]!.token,
+      });
+
+      expect(acceptedAfterVerification.status).toBe(200);
+      expect(await context.prisma.membership.count()).toBe(2);
+    });
+
     it('allows the owner, but not an admin, to invite an administrator', async () => {
       const owner = await registerAndLogin(context, 'owner@example.com');
       const admin = await registerAndLogin(context, 'admin@example.com');
+      await verifyEmail(context, admin.client, 'admin@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
       await post(owner.client, `/workspaces/${workspace.id}/invitations`).send({
@@ -313,6 +350,7 @@ describe('EduPlatform database integration', () => {
     it('lets the owner change a member role and remove the member', async () => {
       const owner = await registerAndLogin(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
+      await verifyEmail(context, member.client, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
       await post(owner.client, `/workspaces/${workspace.id}/invitations`).send({
@@ -359,6 +397,7 @@ describe('EduPlatform database integration', () => {
     it('blocks teachers from listing members and invitations', async () => {
       const owner = await registerAndLogin(context, 'owner@example.com');
       const teacher = await registerAndLogin(context, 'teacher@example.com');
+      await verifyEmail(context, teacher.client, 'teacher@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
       await post(owner.client, `/workspaces/${workspace.id}/invitations`).send({
@@ -381,6 +420,7 @@ describe('EduPlatform database integration', () => {
     it('rejects duplicate invitations for an existing member', async () => {
       const owner = await registerAndLogin(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
+      await verifyEmail(context, member.client, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
       await post(owner.client, `/workspaces/${workspace.id}/invitations`).send({

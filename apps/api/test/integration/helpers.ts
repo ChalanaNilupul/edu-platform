@@ -102,6 +102,26 @@ export async function registerAndLogin(context: TestContext, email: string) {
   return { client, user: login.body.user as { id: string; email: string } };
 }
 
+export async function verifyEmail(
+  context: TestContext,
+  client: ReturnType<typeof createAgent>,
+  email: string,
+) {
+  const verification = [...context.mail.verifications]
+    .reverse()
+    .find((entry) => entry.email === email);
+
+  if (!verification) {
+    throw new Error(`No verification email captured for ${email}`);
+  }
+
+  const response = await post(client, '/auth/email/verify').send({ token: verification.token });
+
+  if (response.status !== 200) {
+    throw new Error(`Email verification failed for ${email}: ${response.status}`);
+  }
+}
+
 export async function createWorkspace(
   client: ReturnType<typeof createAgent>,
   name: string,

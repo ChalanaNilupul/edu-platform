@@ -117,6 +117,7 @@ The initial target market is Sri Lanka, with support planned for independent tui
 
 - [x] Implement workspace invitations.
 - [x] Implement invitation acceptance.
+- [x] Require a verified email address before accepting an invitation.
 - [x] Implement invitation expiration (7-day TTL, `EXPIRED` status).
 - [x] Implement membership management.
 - [x] Implement member removal.
@@ -191,6 +192,17 @@ Implemented after the Phase 2 security review:
 - `WorkspaceRolesGuard` fails closed when a route has no `workspaceId` parameter.
 
 Verified: 82 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and builds.
+
+### Invitation onboarding notes (November 12, 2026)
+
+Implemented and covered by automated tests:
+
+- Invitation acceptance now requires a verified email address; the email binding is meaningless otherwise.
+- The acceptance page detects an unverified session, disables the accept button, explains why, offers a session-authenticated "resend verification email" action and a "check again" action.
+- `next` is preserved through the whole unregistered-invitee journey: invite link → login → register → verify → login → accept. Shared `safeInternalPath`/`withNext` helpers keep the redirect internal.
+- Integration test asserts a 403 and an untouched `PENDING` invitation before verification, then a successful acceptance afterwards.
+
+Verified: 83 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and a successful `next build`.
 
 # Phase 3 — Student Management
 

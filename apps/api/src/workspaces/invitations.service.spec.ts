@@ -290,7 +290,7 @@ describe('InvitationsService', () => {
       tx.workspaceInvitation.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.accept('user-123', 'invitee@example.com', 'session-123', 'unknown'),
+        service.accept('user-123', 'invitee@example.com', new Date(), 'session-123', 'unknown'),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(tx.workspaceInvitation.findUnique).toHaveBeenCalledWith({
@@ -314,7 +314,7 @@ describe('InvitationsService', () => {
       });
 
       await expect(
-        service.accept('user-123', 'invitee@example.com', 'session-123', 'token'),
+        service.accept('user-123', 'invitee@example.com', new Date(), 'session-123', 'token'),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -325,7 +325,7 @@ describe('InvitationsService', () => {
       });
 
       await expect(
-        service.accept('user-123', 'invitee@example.com', 'session-123', 'token'),
+        service.accept('user-123', 'invitee@example.com', new Date(), 'session-123', 'token'),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(tx.workspaceInvitation.update).toHaveBeenCalledWith({
@@ -338,7 +338,17 @@ describe('InvitationsService', () => {
       tx.workspaceInvitation.findUnique.mockResolvedValue(invitation);
 
       await expect(
-        service.accept('user-123', 'other@example.com', 'session-123', 'token'),
+        service.accept('user-123', 'other@example.com', new Date(), 'session-123', 'token'),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(tenantMock.runAsTenant).not.toHaveBeenCalled();
+    });
+
+    it('rejects accepting an invitation when the email address is not verified', async () => {
+      tx.workspaceInvitation.findUnique.mockResolvedValue(invitation);
+
+      await expect(
+        service.accept('user-123', 'invitee@example.com', null, 'session-123', 'token'),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(tenantMock.runAsTenant).not.toHaveBeenCalled();
@@ -355,6 +365,7 @@ describe('InvitationsService', () => {
       const result = await service.accept(
         'user-123',
         ' INVITEE@EXAMPLE.COM ',
+        new Date(),
         'session-123',
         'token',
       );
@@ -420,7 +431,7 @@ describe('InvitationsService', () => {
         status: MembershipStatus.ACTIVE,
       });
 
-      await service.accept('user-123', 'invitee@example.com', undefined, 'token');
+      await service.accept('user-123', 'invitee@example.com', new Date(), undefined, 'token');
 
       expect(tx.session.updateMany).not.toHaveBeenCalled();
     });

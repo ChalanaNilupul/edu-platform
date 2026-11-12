@@ -409,6 +409,7 @@ describe('Workspaces API (e2e)', () => {
       expect(invitationsService.accept).toHaveBeenCalledWith(
         user.id,
         user.email,
+        user.emailVerifiedAt,
         'session-123',
         'invitation-token',
       );

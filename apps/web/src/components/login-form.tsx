@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { CheckCircle2, GraduationCap, Loader2 } from 'lucide-react';
 
 import { ApiError, apiFetch } from '@/lib/api';
+import { withNext } from '@/lib/safe-redirect';
 
 type LoginFormProps = {
   notice?: string;
@@ -118,7 +119,10 @@ export function LoginForm({ notice = '', nextPath = '/' }: LoginFormProps) {
 
         <p className="mt-6 text-center text-sm text-[#64748B]">
           Don&apos;t have an account?{' '}
-          <Link href="/register" className="font-semibold text-[#2563EB] hover:underline">
+          <Link
+            href={withNext('/register', nextPath)}
+            className="font-semibold text-[#2563EB] hover:underline"
+          >
             Create account
           </Link>
         </p>

@@ -29,6 +29,12 @@ export class InvitationsController {
     @CurrentSessionId() sessionId: string,
     @Body(new ValidationPipe({ expectedType: AcceptInvitationDto })) dto: AcceptInvitationDto,
   ) {
-    return this.invitationsService.accept(user.id, user.email, sessionId, dto.token);
+    return this.invitationsService.accept(
+      user.id,
+      user.email,
+      user.emailVerifiedAt,
+      sessionId,
+      dto.token,
+    );
   }
 }

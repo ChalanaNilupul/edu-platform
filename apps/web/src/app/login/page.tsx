@@ -1,6 +1,7 @@
 export const instant = false;
 
 import { LoginForm } from '@/components/login-form';
+import { safeInternalPath } from '@/lib/safe-redirect';
 
 const notices: Record<string, string> = {
   registered: 'Account created. Check your email to verify your address, then sign in.',
@@ -17,14 +18,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const noticeKey = ['registered', 'verified', 'reset'].find((key) => params[key]);
   const notice = noticeKey ? (notices[noticeKey] ?? '') : '';
   const requestedNext = typeof params.next === 'string' ? params.next : '';
-
-  // Browsers treat `\` like `/`, so `/\host` would also leave the origin.
-  const nextPath =
-    requestedNext.startsWith('/') &&
-    !requestedNext.startsWith('//') &&
-    !requestedNext.includes('\\')
-      ? requestedNext
-      : '/';
+  const nextPath = safeInternalPath(requestedNext);
 
   return <LoginForm notice={notice} nextPath={nextPath} />;
 }

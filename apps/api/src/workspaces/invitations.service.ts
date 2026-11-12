@@ -180,7 +180,13 @@ export class InvitationsService {
     });
   }
 
-  async accept(userId: string, userEmail: string, sessionId: string | undefined, token: string) {
+  async accept(
+    userId: string,
+    userEmail: string,
+    emailVerifiedAt: Date | null,
+    sessionId: string | undefined,
+    token: string,
+  ) {
     // Invitation acceptance is token-authenticated, so the initial lookup runs
     // through the narrow system path. Every write runs under tenant context.
     const invitation = await this.tenant.runAsSystem((tx) =>
@@ -219,6 +225,12 @@ export class InvitationsService {
 
     if (invitation.email !== userEmail.trim().toLowerCase()) {
       throw new ForbiddenException('This invitation was sent to a different email address');
+    }
+
+    // Invitations are bound to the email address; an unverified account proves
+    // no ownership of that address, so the binding would be meaningless.
+    if (!emailVerifiedAt) {
+      throw new ForbiddenException('Verify your email address before accepting this invitation');
     }
 
     const membership = await this.tenant.runAsTenant(invitation.workspaceId, async (tx) => {
