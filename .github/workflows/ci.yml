@@ -37,11 +37,17 @@ jobs:
         env:
           DATABASE_URL: postgresql://edu_admin:ci_password@localhost:5432/edu_platform?schema=public
 
+      - name: Run automated tests
+        run: pnpm test
+
       - name: Run type checks
         run: pnpm typecheck
 
       - name: Run lint checks
         run: pnpm lint
+
+      - name: Check code formatting
+        run: pnpm format:check
 
       - name: Build applications
         run: pnpm build

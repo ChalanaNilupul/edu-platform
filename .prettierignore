@@ -5,3 +5,7 @@ dist/
 build/
 coverage/
 pnpm-lock.yaml
+
+# Generated files
+apps/web/next-env.d.ts
+apps/api/src/generated/

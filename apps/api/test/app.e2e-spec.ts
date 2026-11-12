@@ -22,9 +22,7 @@ describe('EduPlatform API (e2e)', () => {
   });
 
   it('GET /api/v1/health should return API health status', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/api/v1/health')
-      .expect(200);
+    const response = await request(app.getHttpServer()).get('/api/v1/health').expect(200);
 
     expect(response.body).toMatchObject({
       status: 'ok',
