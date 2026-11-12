@@ -42,6 +42,8 @@ jobs:
 
       - name: Run API end-to-end tests
         run: pnpm --filter @edu-platform/api test:e2e
+        env:
+          DATABASE_URL: postgresql://edu_admin:ci_password@localhost:5432/edu_platform?schema=public
 
       - name: Run type checks
         run: pnpm typecheck
