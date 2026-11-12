@@ -230,7 +230,7 @@ Students are workspace records with no login of their own; guardian links and CS
 - Read access: OWNER (override), ADMIN, BRANCH_MANAGER, TEACHER. Write access: OWNER (override), ADMIN, BRANCH_MANAGER.
 - Audit events `STUDENT_CREATED`, `STUDENT_UPDATED` and `STUDENT_STATUS_CHANGED` store IDs and changed field names only; updates are diffed against the stored row so a save with no changes writes no event.
 - Web UI: directory with search/filter/pagination, student detail, create and edit forms, plus role-aware navigation. Users with no active workspace see the Students nav item disabled until they switch workspace.
-- Runtime role needs the new table: run `pnpm exec prisma migrate deploy` and `pnpm db:setup-app-role`.
+- Runtime role needs the new table: run `pnpm --filter @edu-platform/api db:sync` after pulling (it generates the client, applies migrations and refreshes the role grants).
 
 Verified: 98 unit tests, 44 mocked HTTP E2E tests, 33 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner/teacher walkthrough of the directory.
 

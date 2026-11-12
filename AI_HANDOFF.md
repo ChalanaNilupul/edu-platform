@@ -457,7 +457,8 @@ Implemented already: email verification, password reset, Origin/Referer enforcem
 - Placement: events are recorded after the primary business transaction commits, so only successful state changes are audited (plus `LOGIN_FAILED`, which is the point of that event).
 - Covered events: `USER_REGISTERED`, `LOGIN_SUCCEEDED`, `LOGIN_FAILED`, `EMAIL_VERIFIED`, `EMAIL_VERIFICATION_RESENT`, `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_COMPLETED`, `WORKSPACE_CREATED`, `WORKSPACE_SWITCHED`, `MEMBER_ROLE_CHANGED`, `MEMBER_REMOVED`, `INVITATION_CREATED`, `INVITATION_REVOKED`, `INVITATION_ACCEPTED`.
 - No read API yet. Query the table directly until an admin-facing viewer exists.
-- Database role: after `pnpm exec prisma migrate deploy`, re-run `pnpm db:setup-app-role` so the restricted runtime role receives grants on the new table.
+- Database role: the setup script grants on all current tables and also sets `ALTER DEFAULT PRIVILEGES`, so tables created later by the migration role inherit the grants automatically. Re-run `pnpm db:setup-app-role` only when the role is missing, `DATABASE_APP_URL` changes, or migrations are applied by a different database user.
+- `pnpm --filter @edu-platform/api db:sync` runs `prisma generate`, `prisma migrate deploy` and the role setup in one idempotent step, skipping the role step when `DATABASE_APP_URL` is unset.
 
 ## Workspace Management
 
@@ -482,7 +483,7 @@ Implemented already: tenant context resolution through the session's active work
 - `TenantContextService` runs every tenant query inside `prisma.$transaction` and sets the context with `set_config(..., true)`, so a pooled connection cannot inherit another request's workspace after commit.
 - All workspace services use `runAsTenant`; the memberships list uses `runAsUser`; the token-authenticated invitation lookup in `InvitationsService.accept` uses `runAsSystem`.
 - `apps/api/test/integration/rls.integration-spec.ts` switches to a restricted role (`edu_rls_test`) because the development role is a superuser and would otherwise bypass every policy.
-- `pnpm db:setup-app-role` creates or updates the runtime role from `DATABASE_APP_URL` with `NOSUPERUSER`, `NOBYPASSRLS` and DML-only grants. Runtime uses `DATABASE_APP_URL` when set, otherwise `DATABASE_URL`.
+- `pnpm db:setup-app-role` creates or updates the runtime role from `DATABASE_APP_URL` with `NOSUPERUSER`, `NOBYPASSRLS` and DML-only grants. Runtime uses `DATABASE_APP_URL` when set, otherwise `DATABASE_URL`. `pnpm db:sync` chains it after generate and migrate.
 - `main.ts` calls `assertRestrictedDatabaseRole` at startup: production refuses a superuser or `BYPASSRLS` connection; other environments log a warning.
 
 ## Phase 3 Remaining Work
