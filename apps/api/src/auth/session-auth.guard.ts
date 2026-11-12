@@ -1,7 +1,7 @@
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
-import type { AuthService } from './auth.service.js';
+import { AuthService } from './auth.service.js';
 
 type AuthenticatedRequest = Request & {
   user?: {

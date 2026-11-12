@@ -1,11 +1,11 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
 import { MembershipStatus } from '../generated/prisma/client.js';
-import type { PrismaService } from '../prisma/prisma.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
 
   async create(userId: string, sessionId: string, dto: CreateWorkspaceDto) {
     return this.prisma.$transaction(async (tx) => {

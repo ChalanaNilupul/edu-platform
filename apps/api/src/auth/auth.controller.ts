@@ -54,7 +54,12 @@ export class AuthController {
   async me(@Req() request: Request) {
     const sessionToken = request.cookies?.edu_session as string | undefined;
 
-    return this.authService.getCurrentUser(sessionToken);
+    const session = await this.authService.getCurrentSession(sessionToken);
+
+    return {
+      user: session.user,
+      activeWorkspaceId: session.activeWorkspaceId,
+    };
   }
 
   @Post('logout')

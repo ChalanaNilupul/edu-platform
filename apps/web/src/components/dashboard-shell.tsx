@@ -1,8 +1,11 @@
+import Link from 'next/link';
+import type { ReactNode } from 'react';
 import {
   Activity,
   BarChart3,
   Bell,
   BookOpen,
+  Building2,
   CalendarDays,
   ClipboardCheck,
   GraduationCap,
@@ -13,10 +16,10 @@ import {
   Wallet,
 } from 'lucide-react';
 import { LogoutButton } from './logout-button';
-import { WorkspaceManager } from './workspace-manager';
 
 const navigation = [
-  { label: 'Dashboard', icon: LayoutDashboard, active: true },
+  { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
+  { label: 'Workspaces', icon: Building2, href: '/workspaces' },
   { label: 'Students', icon: Users },
   { label: 'Teachers', icon: GraduationCap },
   { label: 'Classes & Batches', icon: BookOpen },
@@ -64,7 +67,13 @@ type DashboardUser = {
   email: string;
 };
 
-export function DashboardShell({ user }: { user: DashboardUser }) {
+type DashboardShellProps = {
+  user: DashboardUser;
+  activePage?: 'Dashboard' | 'Workspaces';
+  children?: ReactNode;
+};
+
+export function DashboardShell({ user, activePage = 'Dashboard', children }: DashboardShellProps) {
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
   const initials = fullName
     .split(' ')
@@ -72,6 +81,7 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
     .join('')
     .slice(0, 2)
     .toUpperCase();
+
   return (
     <div className="min-h-screen bg-slate-50 lg:flex">
       <aside className="hidden w-64 shrink-0 flex-col bg-[#172B4D] text-white lg:flex">
@@ -99,16 +109,37 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
           <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-blue-200/70">
             Main menu
           </p>
+
           <div className="space-y-1">
             {navigation.map((item) => {
               const Icon = item.icon;
+              const isActive = item.label === activePage;
+
+              const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
+                isActive
+                  ? 'bg-blue-600 font-semibold text-white'
+                  : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
+              }`;
+
+              if (item.href) {
+                return (
+                  <Link
+                    key={item.label}
+                    href={item.href}
+                    aria-current={isActive ? 'page' : undefined}
+                    className={className}
+                  >
+                    <Icon size={19} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              }
 
               return (
                 <div
                   key={item.label}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm ${
-                    item.active ? 'bg-blue-600 font-semibold text-white' : 'text-blue-100/80'
-                  }`}
+                  className="flex cursor-not-allowed items-center gap-3 rounded-lg px-3 py-3 text-sm text-blue-100/40"
+                  title="Coming soon"
                 >
                   <Icon size={19} />
                   <span>{item.label}</span>
@@ -127,8 +158,8 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
       <div className="min-w-0 flex-1">
         <header className="flex h-20 items-center justify-between border-b border-slate-200 bg-white px-5 sm:px-8">
           <div>
-            <p className="text-sm text-slate-500">Workspace / Overview</p>
-            <h2 className="text-lg font-semibold text-slate-900">Dashboard</h2>
+            <p className="text-sm text-slate-500">Workspace / {activePage}</p>
+            <h2 className="text-lg font-semibold text-slate-900">{activePage}</h2>
           </div>
 
           <div className="flex items-center gap-4">
@@ -161,102 +192,114 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
         </header>
 
         <main className="mx-auto max-w-7xl p-5 sm:p-8">
-          <div className="mb-8">
-            <p className="text-sm font-medium text-blue-600">
-              {new Date().toLocaleDateString('en-US', {
-                weekday: 'long',
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric',
-              })}
-            </p>
-            <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Welcome, {user.firstName}!
-            </h1>
-            <p className="mt-2 text-sm text-slate-500">
-              Here&apos;s what&apos;s happening in your workspace today.
-            </p>
-          </div>
+          {children ?? (
+            <>
+              <div className="mb-8">
+                <p className="text-sm font-medium text-blue-600">
+                  {new Date().toLocaleDateString('en-US', {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                  })}
+                </p>
+                <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
+                  Welcome, {user.firstName}!
+                </h1>
+                <p className="mt-2 text-sm text-slate-500">
+                  Here&apos;s what&apos;s happening in your workspace today.
+                </p>
+              </div>
 
-          <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-            {stats.map((stat) => {
-              const Icon = stat.icon;
+              <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+                {stats.map((stat) => {
+                  const Icon = stat.icon;
 
-              return (
-                <div
-                  key={stat.label}
-                  className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
-                >
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                  return (
                     <div
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg ${stat.color}`}
+                      key={stat.label}
+                      className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
                     >
-                      <Icon size={20} />
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-slate-500">{stat.label}</p>
+                        <div
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg ${stat.color}`}
+                        >
+                          <Icon size={20} />
+                        </div>
+                      </div>
+
+                      <p className="mt-5 text-2xl font-bold tracking-tight text-slate-900">
+                        {stat.value}
+                      </p>
+                      <p className="mt-2 text-xs font-medium text-emerald-600">{stat.change}</p>
                     </div>
-                  </div>
+                  );
+                })}
+              </section>
 
-                  <p className="mt-5 text-2xl font-bold tracking-tight text-slate-900">
-                    {stat.value}
-                  </p>
-                  <p className="mt-2 text-xs font-medium text-emerald-600">{stat.change}</p>
-                </div>
-              );
-            })}
-          </section>
-
-          <section className="mt-8 grid gap-5 xl:grid-cols-3">
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-slate-900">Workspace overview</h3>
-                  <p className="mt-1 text-sm text-slate-500">
-                    Your education operations at a glance.
-                  </p>
-                </div>
-                <Activity className="text-blue-600" size={21} />
-              </div>
-
-              <div className="mt-8 flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
-                <BarChart3 size={34} className="text-slate-400" />
-                <p className="mt-3 text-sm font-medium text-slate-700">
-                  Analytics will appear here
-                </p>
-                <p className="mt-1 text-xs text-slate-500">
-                  Attendance, enrollment and financial trends.
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="font-semibold text-slate-900">Upcoming classes</h3>
-              <p className="mt-1 text-sm text-slate-500">Your next scheduled sessions.</p>
-
-              <div className="mt-6 space-y-5">
-                {[
-                  { subject: 'Mathematics', time: '09:00 AM', batch: 'Grade 10' },
-                  { subject: 'Science', time: '11:30 AM', batch: 'Grade 11' },
-                  { subject: 'English', time: '02:00 PM', batch: 'Grade 9' },
-                ].map((session) => (
-                  <div key={session.subject} className="flex gap-3">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
-                      <CalendarDays size={19} />
-                    </div>
+              <section className="mt-8 grid gap-5 xl:grid-cols-3">
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
+                  <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold text-slate-800">{session.subject}</p>
-                      <p className="mt-1 text-xs text-slate-500">
-                        {session.batch} · {session.time}
+                      <h3 className="font-semibold text-slate-900">Workspace overview</h3>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Your education operations at a glance.
                       </p>
                     </div>
+                    <Activity className="text-blue-600" size={21} />
                   </div>
-                ))}
-              </div>
-            </div>
-          </section>
 
-          <section className="mt-8 mb-8">
-            <WorkspaceManager />
-          </section>
+                  <div className="mt-8 flex min-h-48 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+                    <BarChart3 size={34} className="text-slate-400" />
+                    <p className="mt-3 text-sm font-medium text-slate-700">
+                      Analytics will appear here
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Attendance, enrollment and financial trends.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                  <h3 className="font-semibold text-slate-900">Upcoming classes</h3>
+                  <p className="mt-1 text-sm text-slate-500">Your next scheduled sessions.</p>
+
+                  <div className="mt-6 space-y-5">
+                    {[
+                      {
+                        subject: 'Mathematics',
+                        time: '09:00 AM',
+                        batch: 'Grade 10',
+                      },
+                      {
+                        subject: 'Science',
+                        time: '11:30 AM',
+                        batch: 'Grade 11',
+                      },
+                      {
+                        subject: 'English',
+                        time: '02:00 PM',
+                        batch: 'Grade 9',
+                      },
+                    ].map((session) => (
+                      <div key={session.subject} className="flex gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600">
+                          <CalendarDays size={19} />
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-slate-800">{session.subject}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {session.batch} · {session.time}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
         </main>
       </div>
     </div>

@@ -12,9 +12,15 @@ type Workspace = {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
 
-export function WorkspaceManager() {
+type WorkspaceManagerProps = {
+  initialActiveWorkspaceId: string | null;
+};
+
+export function WorkspaceManager({ initialActiveWorkspaceId }: WorkspaceManagerProps) {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(
+    initialActiveWorkspaceId,
+  );
   const [name, setName] = useState('');
   const [type, setType] = useState<'TEACHER' | 'INSTITUTE'>('TEACHER');
   const [showForm, setShowForm] = useState(false);
