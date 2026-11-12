@@ -113,6 +113,14 @@ export class AuthService {
   }
 
   async getCurrentUser(sessionToken: string | undefined) {
+    const session = await this.getCurrentSession(sessionToken);
+
+    return {
+      user: session.user,
+    };
+  }
+
+  async getCurrentSession(sessionToken: string | undefined) {
     if (!sessionToken) {
       throw new UnauthorizedException('Not authenticated');
     }
@@ -140,6 +148,8 @@ export class AuthService {
 
     return {
       user: session.user,
+      sessionId: session.id,
+      activeWorkspaceId: session.activeWorkspaceId,
     };
   }
 }

@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { LogoutButton } from './logout-button';
+import { WorkspaceManager } from './workspace-manager';
 
 const navigation = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
@@ -89,8 +90,8 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
             Workspace
           </p>
           <div className="rounded-xl border border-white/10 bg-white/10 px-3 py-3">
-            <p className="text-sm font-semibold">Demo Institute</p>
-            <p className="mt-1 text-xs text-blue-200">Main workspace</p>
+            <p className="text-sm font-semibold">Workspace management</p>
+            <p className="mt-1 text-xs text-blue-200">Manage your education spaces</p>
           </div>
         </div>
 
@@ -161,7 +162,14 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
 
         <main className="mx-auto max-w-7xl p-5 sm:p-8">
           <div className="mb-8">
-            <p className="text-sm font-medium text-blue-600">Wednesday, November 11, 2026</p>
+            <p className="text-sm font-medium text-blue-600">
+              {new Date().toLocaleDateString('en-US', {
+                weekday: 'long',
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
               Welcome, {user.firstName}!
             </h1>
@@ -246,9 +254,9 @@ export function DashboardShell({ user }: { user: DashboardUser }) {
             </div>
           </section>
 
-          <p className="mt-8 text-center text-xs text-slate-400">
-            Sample dashboard data · Backend integration pending
-          </p>
+          <section className="mt-8 mb-8">
+            <WorkspaceManager />
+          </section>
         </main>
       </div>
     </div>

@@ -1,11 +1,13 @@
 import { Module } from '@nestjs/common';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { SessionAuthGuard } from './session-auth.guard.js';
 
 @Module({
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [AuthService, SessionAuthGuard],
+  exports: [AuthService, SessionAuthGuard],
   imports: [
     ThrottlerModule.forRoot([
       {
