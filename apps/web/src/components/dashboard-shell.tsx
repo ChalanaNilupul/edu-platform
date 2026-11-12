@@ -12,6 +12,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react';
+import { LogoutButton } from './logout-button';
 
 const navigation = [
   { label: 'Dashboard', icon: LayoutDashboard, active: true },
@@ -56,7 +57,20 @@ const stats = [
   },
 ];
 
-export function DashboardShell() {
+type DashboardUser = {
+  firstName: string;
+  lastName: string | null;
+  email: string;
+};
+
+export function DashboardShell({ user }: { user: DashboardUser }) {
+  const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+  const initials = fullName
+    .split(' ')
+    .map((part) => part[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
   return (
     <div className="min-h-screen bg-slate-50 lg:flex">
       <aside className="hidden w-64 shrink-0 flex-col bg-[#172B4D] text-white lg:flex">
@@ -132,12 +146,15 @@ export function DashboardShell() {
 
             <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
               <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-700">
-                AD
+                {initials}
               </div>
+
               <div className="hidden sm:block">
-                <p className="text-sm font-semibold text-slate-800">Admin User</p>
-                <p className="text-xs text-slate-500">Workspace owner</p>
+                <p className="text-sm font-semibold text-slate-800">{fullName}</p>
+                <p className="text-xs text-slate-500">{user.email}</p>
               </div>
+
+              <LogoutButton />
             </div>
           </div>
         </header>
@@ -146,7 +163,7 @@ export function DashboardShell() {
           <div className="mb-8">
             <p className="text-sm font-medium text-blue-600">Wednesday, November 11, 2026</p>
             <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-              Welcome back, Admin!
+              Welcome, {user.firstName}!
             </h1>
             <p className="mt-2 text-sm text-slate-500">
               Here&apos;s what&apos;s happening in your workspace today.

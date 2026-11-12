@@ -144,14 +144,21 @@ A planning task is complete only after its acceptance criteria are met and revie
 - [x] Add DTO validation and cookie parsing.
 - [x] Add initial login rate limiting and Origin checking.
 - [x] Verify lint, typecheck, build and GitHub Actions.
+- [x] Build frontend registration and login pages and connect them to the API.
+- [x] Protect the dashboard with server-side session verification.
+- [x] Display authenticated user details in the dashboard.
+- [x] Implement frontend logout with a confirmation dialog.
+- [x] Manually verify registration, login, session persistence, logout and protected-route redirection in the browser.
 
 ### 2.3 Authentication security and remaining features
 
+- [x] Add AuthService unit tests covering registration, login, logout and session validation (11 tests).
+- [x] Add authentication controller HTTP tests covering registration, login, current-user retrieval and logout (7 tests).
 - [ ] Complete runtime testing of rate limiting and Origin checking.
 - [ ] Implement and verify stronger CSRF protection.
 - [ ] Implement email verification.
 - [ ] Implement password reset.
-- [ ] Add automated authentication tests and review security.
+- [ ] Complete authentication security review.
 
 ### 2.4 Workspace management
 
