@@ -21,7 +21,7 @@ Open PowerShell and run:
 ```powershell
 git clone https://github.com/ChalanaNilupul/edu-platform.git
 cd edu-platform
-git switch feat/phase-1-foundation
+git switch feat/phase-2-identity
 ```
 
 ## 3. Install Dependencies
@@ -50,6 +50,12 @@ DATABASE_URL="postgresql://edu_admin:your_password@localhost:5432/edu_platform?s
 ```
 
 If your password contains special characters, URL-encode them in `DATABASE_URL`.
+
+The API environment also controls mail and cross-origin behavior:
+
+- `MAIL_DRIVER=console` logs verification and reset links to the API console in development. No SMTP credentials are required locally.
+- `APP_WEB_URL` is used to build those links and should point at the frontend (`http://localhost:3000`).
+- `CORS_ORIGIN` must match the frontend origin; unsafe requests are also checked against `Origin`/`Referer`.
 
 Never commit real `.env` files to GitHub.
 
@@ -113,8 +119,13 @@ Development URLs:
 ```powershell
 pnpm lint
 pnpm typecheck
+pnpm test
+pnpm --filter @edu-platform/api test:e2e
 pnpm build
+pnpm format:check
 ```
+
+`pnpm test` runs unit tests. `test:e2e` runs the mocked HTTP end-to-end suite through supertest; it does not require a database but also does not prove database behavior.
 
 GitHub Actions automatically runs these checks when code is pushed to the configured branches.
 
@@ -123,7 +134,7 @@ GitHub Actions automatically runs these checks when code is pushed to the config
 Before starting work:
 
 ```powershell
-git switch feat/phase-1-foundation
+git switch feat/phase-2-identity
 git pull
 pnpm install
 ```
@@ -133,7 +144,7 @@ After making changes:
 ```powershell
 git add .
 git commit -m "describe your changes"
-git push origin feat/phase-1-foundation
+git push origin feat/phase-2-identity
 ```
 
 Each PC maintains its own local PostgreSQL database and `.env` files. Git synchronizes source code and migration files, not local database records.

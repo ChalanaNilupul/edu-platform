@@ -6,6 +6,13 @@ This document is the current development handoff and implementation reference fo
 
 It records the actual project direction, technical architecture, implementation progress, outstanding work and development priorities.
 
+## Current state at a glance
+
+- Phase 2 Batch 1 is implemented: workspace roles, memberships, invitations, email verification, password reset, CSRF/security headers, rate limiting and the matching frontend.
+- Verified by 74 unit tests and 33 mocked HTTP E2E tests, plus typecheck, lint, format and a successful `next build`.
+- Not verified: real database integration, PostgreSQL RLS, browser walkthrough, runtime rate-limit and Origin behavior.
+- Nothing has been committed, pushed or merged as part of this work.
+
 ---
 
 # 1. Project Overview
@@ -90,12 +97,17 @@ edu-platform/
 │   │   ├── src/
 │   │   │   ├── auth/
 │   │   │   ├── workspaces/
+│   │   │   ├── mail/
+│   │   │   ├── common/
+│   │   │   ├── health/
+│   │   │   ├── prisma/
 │   │   │   └── generated/
 │   │   └── test/
 │   └── web/
 │       └── src/
 │           ├── app/
-│           └── components/
+│           ├── components/
+│           └── lib/
 ├── infra/
 │   └── docker/
 ├── .github/
@@ -156,6 +168,17 @@ Membership statuses currently include:
 
 A membership is required for workspace access.
 
+Each membership carries a predefined `WorkspaceRole`:
+
+- `OWNER`
+- `ADMIN`
+- `BRANCH_MANAGER`
+- `TEACHER`
+- `STUDENT`
+- `PARENT`
+
+A `(userId, workspaceId)` unique constraint allows a single membership per user per workspace. `OWNER` bypasses role checks; every other role is matched against the roles required by a route.
+
 ## Session
 
 Stores database-backed authentication sessions.
@@ -165,6 +188,24 @@ Session tokens are hashed before storage.
 The session model also contains a nullable `activeWorkspaceId` field.
 
 The active workspace must be validated against the authenticated user's membership.
+
+## WorkspaceInvitation
+
+Stores pending workspace invitations.
+
+- Unique `(workspaceId, email)` so re-inviting refreshes rather than duplicates.
+- Invitation tokens are hashed (SHA-256) before storage; the raw token only exists in the emailed link.
+- Status values: `PENDING`, `ACCEPTED`, `REVOKED`, `EXPIRED`.
+- Seven-day expiry by default.
+- Acceptance requires the signed-in user's email to match the invited email.
+
+## EmailVerificationToken and PasswordResetToken
+
+Single-use, hashed tokens attached to a user with an expiry.
+
+- Raw tokens are never persisted.
+- Verification/reset tokens are marked as used (or deleted) after consumption.
+- Password reset revokes the user's existing sessions.
 
 # 7. Authentication Implementation
 
@@ -182,6 +223,12 @@ Implemented backend functionality:
 - Logout.
 - Session invalidation.
 - Current-user/session retrieval.
+- Email verification (token issue, verify, resend).
+- Password reset (token issue, reset, session revocation).
+- Origin/Referer CSRF enforcement for unsafe HTTP methods.
+- Global rate limiting via `ThrottlerGuard` plus tighter per-route limits on auth endpoints.
+- Security headers.
+- Provider-agnostic `MailService` with a console driver (`MAIL_DRIVER=console`) used outside production.
 
 Implemented frontend functionality:
 
@@ -190,6 +237,9 @@ Implemented frontend functionality:
 - Protected dashboard.
 - HTTP-only `edu_session` cookie usage.
 - Logout interface.
+- Email verification page.
+- Forgot-password and reset-password pages.
+- Invitation acceptance page.
 
 Authentication cookie configuration includes:
 
@@ -215,10 +265,20 @@ Implemented:
 - Session active workspace persistence.
 - Membership validation during workspace switching.
 - Database transactions for workspace creation and switching.
+- Workspace detail retrieval limited to members.
+- Membership listing, role changes and member removal.
+- Role-aware authorization through `WorkspaceAccessService` and a roles guard.
+- Workspace invitations (create, list, revoke, accept) with email-bound acceptance.
 
-Workspace creation associates the new workspace with the authenticated user.
+Workspace creation associates the new workspace with the authenticated user as `OWNER`.
 
 The creation operation also updates the active workspace on the current session.
+
+Role rules currently enforced:
+
+- Owner can change roles of non-owner members and remove non-owner members.
+- Admins can invite and manage `TEACHER`, `STUDENT` and `PARENT`, but cannot invite or manage `ADMIN` members.
+- Nobody can change or remove the owner, and users cannot change their own role or remove themselves.
 
 ## Frontend
 
@@ -229,15 +289,18 @@ Implemented:
 - Workspace creation form.
 - Workspace creation modal.
 - Workspace switching interface.
+- Dedicated `/workspaces` page.
+- Sidebar navigation entry for workspaces.
+- Active workspace restoration from the session.
+- Member management page (`/workspaces/[workspaceId]/members`) with invitations, role changes and removal.
+- Invitation acceptance page.
 - Loading and error states.
 
 Remaining:
 
-- Dedicated `/workspaces` page.
-- Sidebar navigation.
-- Active workspace restoration after refresh.
-- Complete browser verification.
+- Complete manual browser verification of the new flows.
 - Better workspace overview and settings.
+- Member suspension (distinct from removal).
 
 # 9. Current Frontend State
 
@@ -246,7 +309,13 @@ Current application routes include:
 ```text
 /
 ├── /login
-└── /register
+├── /register
+├── /forgot-password
+├── /reset-password
+├── /verify-email
+├── /invitations/accept
+└── /workspaces
+    └── /workspaces/[workspaceId]/members
 ```
 
 The dashboard currently contains:
@@ -256,7 +325,6 @@ The dashboard currently contains:
 - Summary statistic cards.
 - Workspace overview.
 - Upcoming classes section.
-- Workspace management interface.
 
 Important:
 
@@ -266,37 +334,46 @@ They must not be represented as real student, attendance, finance or timetable r
 
 The final dashboard must retrieve workspace-scoped information from the relevant backend modules.
 
-The workspace management interface is not yet fully integrated into a dedicated route and shared navigation structure.
+All new pages were compiled and built successfully. They have not been walked through in a browser yet because a local PostgreSQL instance was unavailable during development.
 
 # 10. Testing Status
 
-Previously reported test results include:
+Current verified results after the Batch 1 (Phase 2) work:
 
-## Workspace E2E HTTP Tests
+## Unit Tests
 
-9 tests passed.
+74 tests passed across 7 files:
 
-## Authentication E2E HTTP Tests
+- Authentication service.
+- Workspace service.
+- Workspace access service.
+- Memberships service.
+- Invitations service.
+- Session guard.
+- Workspace roles guard.
 
-7 tests passed.
+## E2E HTTP Tests
 
-## Application E2E HTTP Tests
+33 tests passed across 3 files:
 
-1 test passed.
+- Authentication E2E (13).
+- Workspace and invitation E2E (19).
+- Application E2E (1).
 
-## Combined E2E Result
-
-17 tests passed across 3 test files.
-
-Authentication service unit tests and controller HTTP tests have also been implemented.
-
-Additional reported checks:
+## Static Checks
 
 - API typecheck passed.
 - API lint passed.
-- Frontend and backend lint passed after import, JSX and React effect fixes.
-- Three non-blocking Next.js navigation warnings were reported.
-- Prettier formatting was being corrected.
+- Web lint passed.
+- Prettier format check passed.
+- `next build` compiled successfully for all routes.
+
+## What the mocked tests do not prove
+
+- Database integration (no real PostgreSQL was available locally).
+- PostgreSQL RLS enforcement.
+- Browser behavior and layout of the new pages.
+- Runtime behavior of rate limiting and Origin checking.
 
 Important testing distinctions:
 
@@ -316,33 +393,30 @@ Do not claim unverified checks are complete.
 
 - Verify rate limiting at runtime.
 - Verify Origin checking at runtime.
-- Implement stronger CSRF protection.
-- Implement email verification.
-- Implement password reset.
 - Complete authentication security review.
+- Longer-term: stronger CSRF token scheme if the app adds cross-site embedding.
+- Longer-term: production mail delivery driver (the console driver only logs links).
+
+Implemented already: email verification, password reset, Origin/Referer enforcement, rate limiting, security headers.
 
 ## Workspace Management
 
-- Create dedicated `/workspaces` route.
-- Add workspace navigation to the sidebar.
-- Restore active workspace after refresh.
-- Verify creation and switching manually.
-- Implement workspace invitations.
-- Implement invitation acceptance.
-- Implement invitation expiration.
-- Implement membership management.
+- Verify creation and switching manually in a browser.
+- Implement member suspension (removal is done, suspension is not).
+- Longer-term: better workspace overview and settings.
+
+Implemented already: dedicated `/workspaces` route, sidebar navigation, active workspace restoration, invitations, invitation acceptance, invitation expiry and revocation, membership listing, role changes and removal.
 
 ## Tenant Isolation
 
-- Implement tenant context resolution.
-- Enforce active workspace membership.
-- Ensure backend queries are workspace-scoped.
-- Ensure every workspace-owned record has a tenant identifier.
 - Implement PostgreSQL RLS.
 - Set tenant context transaction-safely.
 - Verify pooled connection safety.
-- Implement cross-tenant access tests.
-- Complete tenant security review.
+- Add database-backed cross-tenant integration tests.
+
+Implemented already: tenant context resolution through the session's active workspace, active membership enforcement, server-side workspace authorization, workspace-scoped queries, and mocked cross-tenant access tests (403 on cross-tenant resources, 403 on insufficient roles, email-bound invitation acceptance).
+
+The application-layer isolation is complete for the models that exist today. PostgreSQL RLS is deliberately deferred: it requires a connection-pool-safe transaction-scoped `SET LOCAL` strategy that is a structural change, and it should be implemented together with database-backed integration tests rather than mocked tests.
 
 # 12. Approved Architecture Decisions
 
@@ -381,6 +455,28 @@ Future model:
 - Backend authorization is mandatory.
 
 Tenant isolation must never be bypassed by platform roles.
+
+Implemented decisions from the Batch 1 work:
+
+- Roles are a predefined `WorkspaceRole` enum on `Membership`, not free-form strings. Custom roles, if added later, should be additive rather than replacing the enum's fast path.
+- Authorization is centralized in `WorkspaceAccessService.getActiveMembership` and `requireRoles`, plus a `WorkspaceRolesGuard`. Controllers stay thin.
+- The owner role implicitly satisfies every role requirement, but ownership itself cannot be transferred or revoked through the member endpoints.
+- An admin cannot promote anyone to `ADMIN` or manage another admin, which prevents admin-chain escalation.
+
+## Authentication
+
+- Sessions are database-backed opaque tokens in an HTTP-only `edu_session` cookie. No JWT. This allows immediate revocation on logout, role change or password reset.
+- Session tokens and all email/reset/invitation tokens are stored only as SHA-256 hashes.
+- Email verification uses single-use hashed tokens. Unverified users can still sign in for now; enforcement should be introduced when email-dependent features appear.
+- Password reset revokes all existing sessions for the user.
+- CSRF is mitigated with Origin/Referer validation on unsafe methods combined with SameSite=Lax cookies. A dedicated CSRF token scheme is a later hardening step, not a current blocker.
+- Rate limiting uses NestJS Throttler with a global guard plus tighter per-route overrides on auth endpoints.
+- Mail is sent through a provider-agnostic `MailService`; in development the console driver logs the link. No SMTP or vendor credentials are committed.
+
+## Multi-Tenancy — Deferred Decision
+
+- Application-layer tenant isolation is implemented and tested.
+- PostgreSQL Row-Level Security is intentionally deferred until it can be implemented with transaction-scoped `SET LOCAL` tenant context and verified against a real database. It must not be faked with a session-variable approach that is unsafe under connection pooling.
 
 ## Storage
 
@@ -541,18 +637,14 @@ Do not prioritize these before the core product is working:
 
 Follow this order:
 
-1. Finish workspace management.
-2. Implement dedicated workspace page.
-3. Add workspace sidebar navigation.
-4. Restore active workspace after refresh.
-5. Implement invitations and membership management.
-6. Complete authentication security work.
-7. Implement tenant authorization.
-8. Implement PostgreSQL RLS.
-9. Verify tenant isolation.
-10. Start Student Management.
+1. Start PostgreSQL locally and run database integration tests (migrations + Prisma against a real database).
+2. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
+3. Verify rate limiting and Origin checking at runtime.
+4. Implement PostgreSQL RLS with transaction-scoped tenant context and add cross-tenant integration tests.
+5. Complete the Phase 2 security review.
+6. Start Phase 3 — Student Management.
 
-Do not jump into student, attendance or finance modules before the workspace authorization foundation is ready.
+Do not add student, attendance or finance modules before steps 1–5 are done. The application-layer authorization is in place, but the RLS layer and real-database verification are still open.
 
 # 17. Development Rules for AI Assistance
 

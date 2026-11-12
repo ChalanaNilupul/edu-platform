@@ -82,9 +82,9 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Initial authentication E2E test coverage.
 - [ ] Verify rate limiting at runtime.
 - [ ] Verify Origin checking at runtime.
-- [ ] Implement stronger CSRF protection.
-- [ ] Implement email verification.
-- [ ] Implement password reset.
+- [x] Implement stronger CSRF protection (Origin/Referer enforced for unsafe methods).
+- [x] Implement email verification.
+- [x] Implement password reset.
 - [ ] Complete authentication security review.
 
 ## 2.4 Workspace Management
@@ -93,12 +93,13 @@ The initial target market is Sri Lanka, with support planned for independent tui
 
 - [x] Implement teacher workspace creation.
 - [x] Implement institute workspace creation.
-- [x] Automatically create initial workspace membership.
+- [x] Automatically create initial workspace membership as `OWNER`.
 - [x] Implement workspace listing for authenticated users.
 - [x] Implement active workspace switching.
 - [x] Store active workspace ID in the session.
 - [x] Verify membership before switching workspaces.
 - [x] Use database transactions for workspace creation and switching.
+- [x] Implement workspace detail endpoint with membership role.
 
 ### Frontend
 
@@ -107,41 +108,63 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Implement workspace creation form.
 - [x] Implement workspace creation modal.
 - [x] Implement workspace switching interface.
-- [ ] Create dedicated workspace management page.
-- [ ] Add workspace navigation to the sidebar.
-- [ ] Restore active workspace selection after page refresh.
-- [ ] Complete manual browser verification.
+- [x] Create dedicated `/workspaces` page.
+- [x] Add workspace navigation to the sidebar.
+- [x] Restore active workspace selection after page refresh.
+- [ ] Complete manual browser verification (requires a running database).
 
 ## 2.5 Invitations and Membership Management
 
-- [ ] Implement workspace invitations.
-- [ ] Implement invitation acceptance.
-- [ ] Implement invitation expiration.
-- [ ] Implement membership management.
-- [ ] Implement member removal and suspension.
-- [ ] Implement membership authorization.
+- [x] Implement workspace invitations.
+- [x] Implement invitation acceptance.
+- [x] Implement invitation expiration (7-day TTL, `EXPIRED` status).
+- [x] Implement membership management.
+- [x] Implement member removal.
+- [ ] Implement member suspension.
+- [x] Implement membership authorization.
+- [x] Add invitation and member management UI.
 
 ## 2.6 Tenant Isolation and Authorization
 
-- [ ] Implement tenant context resolution.
-- [ ] Enforce workspace membership checks.
-- [ ] Implement server-side tenant authorization.
-- [ ] Ensure workspace-owned records are tenant-scoped.
-- [ ] Implement PostgreSQL Row-Level Security.
+- [x] Implement tenant context resolution via active membership lookups.
+- [x] Enforce workspace membership checks.
+- [x] Implement server-side tenant authorization.
+- [x] Ensure workspace-owned records are tenant-scoped.
+- [ ] Implement PostgreSQL Row-Level Security (deferred, see Batch 1 notes).
 - [ ] Implement transaction-scoped tenant context.
-- [ ] Test cross-tenant access prevention.
+- [x] Test cross-tenant access prevention (service and HTTP tests).
 - [ ] Complete tenant isolation security review.
 
 ## 2.7 Phase 2 Exit Criteria
 
 - [ ] Authentication security requirements completed.
 - [ ] Workspace creation and switching manually verified.
-- [ ] Workspace invitations implemented.
-- [ ] Membership management implemented.
-- [ ] Tenant authorization implemented.
+- [x] Workspace invitations implemented.
+- [x] Membership management implemented.
+- [x] Tenant authorization implemented.
 - [ ] PostgreSQL RLS implemented and verified.
-- [ ] Cross-tenant isolation tests passing.
+- [x] Cross-tenant isolation tests passing (application layer).
 - [ ] Phase 2 security review completed.
+
+### Batch 1 completion notes (November 12, 2026)
+
+Implemented and covered by automated tests:
+
+- Predefined `WorkspaceRole` enum on memberships (`OWNER`, `ADMIN`, `BRANCH_MANAGER`, `TEACHER`, `STUDENT`, `PARENT`).
+- Workspace invitations with hashed tokens, TTL, revocation and acceptance.
+- Membership listing, role changes and removal with role-aware rules.
+- Email verification and password reset tokens with hashed storage.
+- Origin/Referer CSRF enforcement and security headers.
+- Global and per-route rate limiting.
+- Provider-agnostic mail service using a console driver outside production.
+- Frontend for members, invitations, email verification and password recovery.
+
+Verified with unit tests and mocked HTTP end-to-end tests. Not yet verified:
+
+- PostgreSQL RLS and transaction-scoped tenant context.
+- Real database integration tests (requires a running PostgreSQL instance).
+- Browser walkthrough of the new flows.
+- Runtime verification of rate limiting and Origin checking.
 
 # Phase 3 — Student Management
 

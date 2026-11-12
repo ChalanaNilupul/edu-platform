@@ -100,7 +100,7 @@ Onboarding patterns:
 
 Initial authentication supports email/password, email verification, password reset and secure sessions. Google login and phone OTP may be considered later. Do not use phone number as the unique global account identifier because family members may share a phone.
 
-The exact session mechanism (cookie session versus access/refresh token implementation) remains a detailed design decision.
+The exact session mechanism (cookie session versus access/refresh token implementation) remains a detailed design decision. **Resolved during Phase 2:** database-backed opaque session tokens delivered in an HTTP-only cookie; see section 15.
 
 ## 7. Authorization and privacy — approved
 
@@ -228,7 +228,7 @@ The architecture baseline intentionally leaves implementation-level choices for 
 
 - Exact managed cloud provider, region and service plans.
 - Exact managed PostgreSQL provider and recovery objectives.
-- Cookie-based session implementation versus access/refresh token implementation.
+- ~~Cookie-based session implementation versus access/refresh token implementation.~~ Resolved — see section 15.
 - Exact API response envelope, pagination and filtering contract.
 - CI/CD release approvals and rollback strategy.
 - API key lifecycle, webhook event catalogue and external integration onboarding.
@@ -236,6 +236,46 @@ The architecture baseline intentionally leaves implementation-level choices for 
 - Monitoring provider, alert thresholds and service-level objectives.
 
 These are not blockers to the approved architecture direction. Resolve them before the corresponding implementation work.
+
+## 15. Implemented decisions — Phase 2
+
+These decisions refine, but do not replace, the approved baseline above.
+
+### Sessions
+
+- Database-backed opaque session tokens, not JWT.
+- Tokens are 32 random bytes encoded as base64url and stored as SHA-256 hashes.
+- The raw token lives only in the HTTP-only `edu_session` cookie (SameSite=Lax, Secure in production, seven-day expiry).
+- Sessions can be revoked immediately on logout, password reset or administrative action.
+- The session stores a nullable `activeWorkspaceId`; it is only used after the server re-validates that the user has an `ACTIVE` membership in that workspace.
+
+### Tokens
+
+- Email verification, password reset and invitation tokens follow the same pattern: random raw token, SHA-256 hash at rest, expiry, single use.
+- Password reset also revokes the user's existing sessions.
+
+### Authorization
+
+- Workspace roles are a predefined enum on `Membership`: `OWNER`, `ADMIN`, `BRANCH_MANAGER`, `TEACHER`, `STUDENT`, `PARENT`.
+- Authorization is centralized in a `WorkspaceAccessService` and a roles guard; controllers do not contain ad-hoc checks.
+- `OWNER` implicitly satisfies every role requirement, but ownership cannot be transferred or removed through membership endpoints.
+- An admin cannot invite or manage another admin, preventing admin-chain escalation.
+- Invitation acceptance requires the signed-in user's email to match the invited email.
+
+### CSRF and rate limiting
+
+- Unsafe HTTP methods are validated against `Origin`/`Referer` and SameSite=Lax cookies.
+- NestJS Throttler runs globally with tighter per-route limits on auth endpoints.
+- A dedicated CSRF token scheme remains a later hardening step if cross-site embedding is ever introduced.
+
+### Mail
+
+- Mail goes through a provider-agnostic `MailService`. Development uses a console driver; production delivery is still open.
+
+### Tenant isolation and RLS
+
+- Application-layer isolation is implemented: workspace-scoped queries, active-membership enforcement, server-side role checks and cross-tenant rejection tested with mocked HTTP tests.
+- PostgreSQL RLS is deferred. It requires transaction-scoped tenant context (`SET LOCAL`) that is safe under connection pooling, and it must be implemented and verified together with real-database integration tests. It must not be approximated in a way that leaks tenant context between pooled connections.
 
 ## 14. Architecture principles
 

@@ -10,7 +10,7 @@ The initial focus is the Sri Lankan education market, with support for multiple 
 
 **Current Development Phase: Phase 2 — Identity and Workspace Foundation**
 
-EduPlatform is under active development. The technical foundation and core authentication functionality have been implemented. Workspace management is currently being developed.
+EduPlatform is under active development. The technical foundation, authentication flows, workspace management, membership roles, invitations and password recovery are implemented. Tenant authorization is enforced in the application layer; PostgreSQL Row-Level Security is the remaining Phase 2 security task.
 
 The full LMS and IMS business modules are planned for subsequent development phases.
 
@@ -42,6 +42,11 @@ The full LMS and IMS business modules are planned for subsequent development pha
 - Current-user endpoint.
 - Logout and session invalidation.
 - Protected dashboard.
+- Email verification with hashed single-use tokens.
+- Password reset with session revocation.
+- Origin/Referer CSRF enforcement and security headers.
+- Global and per-route rate limiting.
+- Provider-agnostic mail service (console driver in development).
 
 ### Workspace Management
 
@@ -49,29 +54,34 @@ Backend functionality:
 
 - Teacher workspace creation.
 - Institute workspace creation.
-- Initial workspace membership creation.
+- Initial workspace membership creation as owner.
 - Workspace listing.
 - Active workspace switching.
 - Session-based active workspace storage.
 - Membership verification during workspace switching.
+- Predefined workspace roles (owner, admin, branch manager, teacher, student, parent).
+- Workspace invitations with hashed tokens, expiry and revocation.
+- Membership listing, role changes and member removal with role-aware rules.
 
 Frontend functionality:
 
-- Login and registration pages.
+- Login, registration, email verification, forgot-password and reset-password pages.
 - Dashboard interface.
 - Workspace manager component.
-- Workspace listing.
+- Dedicated workspaces page.
 - Workspace creation modal.
 - Workspace switching interface.
+- Workspace member management page.
+- Invitation acceptance page.
 
 ## Partially Implemented
 
-- Dedicated workspace management page.
-- Active workspace restoration in the frontend.
-- Complete workspace navigation.
-- Authentication security hardening.
-- Workspace invitations.
-- Tenant isolation.
+- PostgreSQL Row-Level Security (application-layer tenant isolation is in place).
+- Real-database integration tests.
+- Manual browser verification of the new flows.
+- Runtime verification of rate limiting and Origin checking.
+- Member suspension (removal is implemented).
+- Workspace overview and settings.
 
 ## Planned Features
 
@@ -188,11 +198,17 @@ edu-platform/
 ├── apps/
 │   ├── api/          # NestJS backend
 │   └── web/          # Next.js frontend
+├── packages/         # Shared packages
 ├── infra/
 │   └── docker/       # Docker infrastructure
+├── docs/             # Project documentation
+├── scripts/          # Repo tooling scripts
 ├── .github/
 │   └── workflows/    # GitHub Actions
 ├── ROADMAP.md
+├── ARCHITECTURE.md
+├── PROJECT_STRUCTURE.md
+├── REQUIREMENTS.md
 ├── README.md
 ├── AI_HANDOFF.md
 └── package.json
@@ -273,10 +289,10 @@ See [ROADMAP.md](./ROADMAP.md) for the complete development plan and implementat
 
 ## Current Development Priorities
 
-1. Finish workspace management.
-2. Complete authentication security.
-3. Implement invitations and membership management.
-4. Implement tenant authorization and isolation.
+1. Run database integration tests against a real PostgreSQL instance.
+2. Manually verify the new flows in a browser.
+3. Implement PostgreSQL RLS with transaction-scoped tenant context.
+4. Complete the Phase 2 security review.
 5. Build Student Management.
 6. Continue with the remaining LMS and IMS modules.
 

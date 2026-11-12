@@ -1,6 +1,26 @@
-# Proposed Project Structure
+# Project Structure
 
-This is a proposed monorepo layout for the platform. It is intentionally a scaffold, not a claim that the technology stack has been finalized. Keep only directories that the team actually uses as implementation begins.
+This is the monorepo layout for the platform. The stack is confirmed (Next.js, NestJS, PostgreSQL, Prisma, Tailwind, pnpm) and the directories below marked as current exist in the repository. Directories such as `apps/mobile` remain planned.
+
+## Current implementation
+
+Backend modules under `apps/api/src`:
+
+- `auth/` — registration, login, sessions, email verification, password reset, guards.
+- `workspaces/` — workspaces, memberships, roles, invitations, access checks.
+- `mail/` — provider-agnostic mail service with a console driver.
+- `common/` — shared middleware, filters and cross-cutting concerns.
+- `health/` — health endpoints.
+- `prisma/` — Prisma service and adapter setup.
+- `generated/` — generated Prisma client (gitignored).
+
+Frontend under `apps/web/src`:
+
+- `app/` — routes and server components.
+- `components/` — feature components (forms, managers, cards).
+- `lib/` — API client and shared helpers.
+
+The layout below is the intended overall scaffold.
 
 ```text
 edu-platform/
