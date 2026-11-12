@@ -18,9 +18,13 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const notice = noticeKey ? (notices[noticeKey] ?? '') : '';
   const requestedNext = typeof params.next === 'string' ? params.next : '';
 
-  // Only allow same-origin paths to avoid open redirects.
+  // Browsers treat `\` like `/`, so `/\host` would also leave the origin.
   const nextPath =
-    requestedNext.startsWith('/') && !requestedNext.startsWith('//') ? requestedNext : '/';
+    requestedNext.startsWith('/') &&
+    !requestedNext.startsWith('//') &&
+    !requestedNext.includes('\\')
+      ? requestedNext
+      : '/';
 
   return <LoginForm notice={notice} nextPath={nextPath} />;
 }

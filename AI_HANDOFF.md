@@ -10,9 +10,10 @@ It records the actual project direction, technical architecture, implementation 
 
 - Phase 2 Batch 1 is implemented: workspace roles, memberships, invitations, email verification, password reset, CSRF/security headers, rate limiting and the matching frontend.
 - Phase 2 Batch 2 adds PostgreSQL RLS on `memberships` and `workspace_invitations`, transaction-scoped tenant context, and a real-database integration suite.
-- Verified by 75 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and a successful `next build`.
-- Still open: browser walkthrough, runtime rate-limit/Origin verification, Phase 2 security review, and a non-superuser database role for production RLS enforcement.
-- Batch 1 commits (`1a85c45`, `c0a4408`) were pushed earlier; Batch 2 is not committed or pushed yet.
+- Phase 2 Batch 3 applies the security review fixes: a restricted runtime database role with a production startup check, required `NODE_ENV`, `TRUST_PROXY` support, a stricter login redirect and a fail-closed roles guard.
+- Verified by 82 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and a successful `next build`.
+- Still open: browser walkthrough, runtime rate-limit/Origin verification, an email-verification enforcement decision, security-event audit logging, and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2) and `8e7bab6` (CI/env fixes) were pushed to `feat/phase-2-rbac-invitations`; Batch 3 is not committed yet.
 
 ---
 
@@ -43,7 +44,7 @@ https://github.com/ChalanaNilupul/edu-platform
 
 Current development branch:
 
-`feat/phase-2-identity`
+`feat/phase-2-rbac-invitations`
 
 Current development phase:
 
@@ -343,7 +344,7 @@ Current verified results after the Batch 1 and Batch 2 (Phase 2) work:
 
 ## Unit Tests
 
-75 tests passed across 7 files:
+82 tests passed across 9 files:
 
 - Authentication service.
 - Workspace service.
@@ -352,6 +353,8 @@ Current verified results after the Batch 1 and Batch 2 (Phase 2) work:
 - Invitations service.
 - Session guard.
 - Workspace roles guard.
+- App setup (`TRUST_PROXY` parsing).
+- Database role startup check.
 
 ## E2E HTTP Tests
 
@@ -401,9 +404,10 @@ Do not claim unverified checks are complete.
 
 ## Authentication Security
 
-- Verify rate limiting at runtime.
+- Verify rate limiting at runtime (configure `TRUST_PROXY` for the deployment topology first).
 - Verify Origin checking at runtime.
-- Complete authentication security review.
+- Decide whether to enforce email verification before workspace actions (security review finding M1).
+- Add structured audit logging for security events such as failed logins, role changes and invitation changes (finding M4).
 - Longer-term: stronger CSRF token scheme if the app adds cross-site embedding.
 - Longer-term: production mail delivery driver (the console driver only logs links).
 
@@ -419,11 +423,11 @@ Implemented already: dedicated `/workspaces` route, sidebar navigation, active w
 
 ## Tenant Isolation
 
-- Provision a dedicated non-superuser, non-owner application database role before production deployment; RLS is bypassed for superusers and `BYPASSRLS` roles.
 - Verify pooled connection safety under load (the tenant context is transaction-scoped, but production load testing is still open).
-- Complete the Phase 2 security review.
+- Set `DATABASE_APP_URL` in every production environment; the API refuses to start there if the runtime role is a superuser or has `BYPASSRLS`.
+- Review the remaining Low-severity findings before a public launch: web security headers, token-in-query Referrer policy, registration email enumeration, session idle timeout and MFA.
 
-Implemented already: tenant context resolution through the session's active workspace, active membership enforcement, server-side workspace authorization, workspace-scoped queries, mocked cross-tenant access tests, and PostgreSQL RLS on `memberships` and `workspace_invitations` with `FORCE ROW LEVEL SECURITY`.
+Implemented already: tenant context resolution through the session's active workspace, active membership enforcement, server-side workspace authorization, workspace-scoped queries, mocked cross-tenant access tests, PostgreSQL RLS on `memberships` and `workspace_invitations` with `FORCE ROW LEVEL SECURITY`, a provisioned restricted runtime role, a production startup check, and the Phase 2 security review.
 
 ### How RLS is wired
 
@@ -432,6 +436,8 @@ Implemented already: tenant context resolution through the session's active work
 - `TenantContextService` runs every tenant query inside `prisma.$transaction` and sets the context with `set_config(..., true)`, so a pooled connection cannot inherit another request's workspace after commit.
 - All workspace services use `runAsTenant`; the memberships list uses `runAsUser`; the token-authenticated invitation lookup in `InvitationsService.accept` uses `runAsSystem`.
 - `apps/api/test/integration/rls.integration-spec.ts` switches to a restricted role (`edu_rls_test`) because the development role is a superuser and would otherwise bypass every policy.
+- `pnpm db:setup-app-role` creates or updates the runtime role from `DATABASE_APP_URL` with `NOSUPERUSER`, `NOBYPASSRLS` and DML-only grants. Runtime uses `DATABASE_APP_URL` when set, otherwise `DATABASE_URL`.
+- `main.ts` calls `assertRestrictedDatabaseRole` at startup: production refuses a superuser or `BYPASSRLS` connection; other environments log a warning.
 
 # 12. Approved Architecture Decisions
 
@@ -654,10 +660,10 @@ Follow this order:
 
 1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
 2. Verify rate limiting and Origin checking at runtime.
-3. Complete the Phase 2 security review, including a decision on a dedicated non-superuser production database role.
+3. Decide whether to enforce email verification, and add audit logging for security events.
 4. Start Phase 3 — Student Management.
 
-Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests and RLS are in place; browser verification, runtime security checks and the production-role decision remain open.
+Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role and the Phase 2 security review are in place; browser verification, runtime security checks, the email-verification decision and audit logging remain open.
 
 # 17. Development Rules for AI Assistance
 

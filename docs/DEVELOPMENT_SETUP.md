@@ -51,6 +51,15 @@ DATABASE_URL="postgresql://edu_admin:your_password@localhost:5432/edu_platform?s
 
 If your password contains special characters, URL-encode them in `DATABASE_URL`.
 
+`DATABASE_URL` is the migration/owner connection. The API can run as a separate, restricted application role, which is what makes Row-Level Security effective:
+
+- `DATABASE_URL` — owner/migration role used by `prisma migrate`.
+- `DATABASE_APP_URL` — restricted runtime role (`NOSUPERUSER`, `NOBYPASSRLS`). When set, the API uses it; otherwise it falls back to `DATABASE_URL`.
+- `NODE_ENV` is required (`development`, `production` or `test`); there is no default.
+- `TRUST_PROXY` defaults to `false`. Behind a reverse proxy, set it to the hop count (for example `1`) or a trusted range so rate limiting sees real client addresses.
+
+In development the API logs a warning when the runtime connection is a superuser or has `BYPASSRLS`, because RLS is not enforced for it. In production the API refuses to start in that case.
+
 The API environment also controls mail and cross-origin behavior:
 
 - `MAIL_DRIVER=console` logs verification and reset links to the API console in development. No SMTP credentials are required locally.
@@ -93,6 +102,20 @@ Generate the Prisma Client:
 pnpm exec prisma generate
 ```
 
+Add the restricted runtime connection to `apps/api/.env` (use its own password):
+
+```env
+DATABASE_APP_URL="postgresql://edu_app:choose_a_password@localhost:5432/edu_platform?schema=public"
+```
+
+Create or update the application role and grant it access:
+
+```powershell
+pnpm db:setup-app-role
+```
+
+The script reads the role name and password from `DATABASE_APP_URL` and connects with `DATABASE_URL`. Re-run it after new migrations so new tables are granted to the role.
+
 Return to the project root:
 
 ```powershell
@@ -128,7 +151,7 @@ pnpm format:check
 
 `pnpm test` runs unit tests. `test:e2e` runs the mocked HTTP end-to-end suite through supertest; it does not require a database but also does not prove database behavior. `test:integration` runs against a real PostgreSQL instance: it creates and migrates a dedicated `edu_platform_test` database, then executes auth, workspace, invitation and RLS tests. PostgreSQL must be running (step 5).
 
-The RLS tests switch to a restricted `edu_rls_test` database role because the local `edu_admin` role is a superuser, and PostgreSQL bypasses RLS for superusers. This matches production expectations: a production deployment must use a non-superuser application role for RLS to be enforced.
+The RLS tests switch to a restricted `edu_rls_test` database role because the local `edu_admin` role is a superuser, and PostgreSQL bypasses RLS for superusers. `pnpm db:setup-app-role` provisions the separate `edu_app` runtime role, and the API refuses to start in production when its connection is a superuser or has `BYPASSRLS`.
 
 GitHub Actions automatically runs these checks when code is pushed to the configured branches.
 

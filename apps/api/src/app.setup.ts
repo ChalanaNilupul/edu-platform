@@ -6,8 +6,31 @@ import type { NextFunction, Request, Response } from 'express';
 
 const UNSAFE_METHODS = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
+export function resolveTrustProxy(value: string): boolean | number | string {
+  if (value === 'false') {
+    return false;
+  }
+
+  if (value === 'true') {
+    return true;
+  }
+
+  const hops = Number(value);
+
+  return Number.isInteger(hops) && hops >= 0 ? hops : value;
+}
+
 export function configureApp(app: INestApplication, configService: ConfigService) {
   const allowedOrigin = configService.getOrThrow<string>('CORS_ORIGIN');
+
+  // Rate limiting must see the real client address when behind a reverse proxy.
+  const httpInstance = app.getHttpAdapter().getInstance() as {
+    set(setting: string, value: unknown): void;
+  };
+  httpInstance.set(
+    'trust proxy',
+    resolveTrustProxy(configService.get<string>('TRUST_PROXY', 'false')),
+  );
 
   app.use(cookieParser());
 

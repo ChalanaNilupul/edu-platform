@@ -14,12 +14,14 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     ConfigModule.forRoot({
       isGlobal: true,
       validationSchema: Joi.object({
-        NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+        NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
         PORT: Joi.number().port().default(4000),
         CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
         APP_WEB_URL: Joi.string().uri().default('http://localhost:3000'),
         MAIL_DRIVER: Joi.string().valid('console', 'disabled').default('console'),
+        TRUST_PROXY: Joi.string().default('false'),
         DATABASE_URL: Joi.string().uri().required(),
+        DATABASE_APP_URL: Joi.string().uri(),
       }),
     }),
     ThrottlerModule.forRoot([

@@ -85,7 +85,7 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Implement stronger CSRF protection (Origin/Referer enforced for unsafe methods).
 - [x] Implement email verification.
 - [x] Implement password reset.
-- [ ] Complete authentication security review.
+- [x] Complete authentication security review.
 
 ## 2.4 Workspace Management
 
@@ -133,8 +133,8 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Implement PostgreSQL Row-Level Security on `memberships` and `workspace_invitations`.
 - [x] Implement transaction-scoped tenant context (`set_config(..., true)`).
 - [x] Test cross-tenant access prevention (service, HTTP and real-database tests).
-- [ ] Complete tenant isolation security review.
-- [ ] Provision a dedicated non-superuser application database role (required before RLS protects a production deployment).
+- [x] Complete tenant isolation security review.
+- [x] Provision a dedicated non-superuser application database role (`pnpm db:setup-app-role` plus a production startup check).
 
 ## 2.7 Phase 2 Exit Criteria
 
@@ -145,7 +145,7 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Tenant authorization implemented.
 - [x] PostgreSQL RLS implemented and verified against a restricted database role.
 - [x] Cross-tenant isolation tests passing (application layer and real database).
-- [ ] Phase 2 security review completed.
+- [x] Phase 2 security review completed.
 
 ### Batch 1 completion notes (November 12, 2026)
 
@@ -178,6 +178,19 @@ Implemented and verified:
 Known constraint: the development/CI database user `edu_admin` is a superuser, so PostgreSQL bypasses RLS for it. The policies are proven with a restricted role in the RLS integration spec, but a production deployment must connect as a non-superuser, non-owner role for RLS to take effect. Application-layer tenant filtering remains in place regardless.
 
 Verified: 75 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and `next build`.
+
+### Security hardening notes (November 12, 2026)
+
+Implemented after the Phase 2 security review:
+
+- Runtime database role separated from the migration role: the API uses `DATABASE_APP_URL` when set, and `pnpm db:setup-app-role` provisions a `NOSUPERUSER`, `NOBYPASSRLS` role with DML-only grants.
+- Startup check rejects a superuser or `BYPASSRLS` runtime connection in production (warning in development), so RLS cannot be silently bypassed.
+- `NODE_ENV` is required; a missing value no longer falls back to development behaviour (non-Secure cookies, console token links, Swagger).
+- `TRUST_PROXY` configuration added (default `false`) so rate limiting can see real client addresses behind a reverse proxy.
+- Login redirect rejects backslash-based open redirects such as `/\host`.
+- `WorkspaceRolesGuard` fails closed when a route has no `workspaceId` parameter.
+
+Verified: 82 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and builds.
 
 # Phase 3 — Student Management
 

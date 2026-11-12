@@ -45,10 +45,12 @@ describe('WorkspaceRolesGuard', () => {
     );
   });
 
-  it('skips the lookup when the route has no workspaceId parameter', async () => {
+  it('rejects a route that has no workspaceId parameter', async () => {
     const request = { user, params: {} };
 
-    await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
+    await expect(guard.canActivate(createContext(request))).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
 
     expect(workspaceAccessMock.getActiveMembership).not.toHaveBeenCalled();
   });

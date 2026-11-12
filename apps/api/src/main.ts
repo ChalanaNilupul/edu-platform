@@ -4,12 +4,16 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 import { AppModule } from './app.module.js';
 import { configureApp } from './app.setup.js';
+import { assertRestrictedDatabaseRole } from './prisma/database-role.js';
+import { PrismaService } from './prisma/prisma.service.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   const configService = app.get(ConfigService);
-  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
+  const nodeEnv = configService.getOrThrow<string>('NODE_ENV');
+
+  await assertRestrictedDatabaseRole(app.get(PrismaService), nodeEnv);
 
   configureApp(app, configService);
 

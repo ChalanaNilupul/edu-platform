@@ -278,6 +278,8 @@ These decisions refine, but do not replace, the approved baseline above.
 - PostgreSQL RLS is enabled and forced on `memberships` and `workspace_invitations`. Policies allow rows when `app.bypass_rls = 'on'`, when `workspace_id` matches `app.workspace_id`, or (memberships only) when `user_id` matches `app.user_id`.
 - `TenantContextService` opens a transaction and sets the context with `set_config(..., true)` (transaction-local), so pooled connections cannot inherit another request's tenant. Every workspace service runs through `runAsTenant` or `runAsUser`; only the token-authenticated invitation lookup uses `runAsSystem`.
 - Verified by `apps/api/test/integration/rls.integration-spec.ts`, which runs the policies as a restricted non-superuser role. PostgreSQL bypasses RLS for superusers and `BYPASSRLS` roles, so production must connect as a dedicated non-superuser application role.
+- `DATABASE_URL` remains the owner/migration connection. The API runtime uses `DATABASE_APP_URL` when set, and `pnpm db:setup-app-role` creates or updates that role with `NOSUPERUSER`, `NOBYPASSRLS` and DML-only grants.
+- At startup the API queries `pg_roles` for its effective role. A superuser or `BYPASSRLS` connection fails startup in production and logs a warning elsewhere, so a deployment cannot silently run without RLS enforcement.
 
 ## 14. Architecture principles
 

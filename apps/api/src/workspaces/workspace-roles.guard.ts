@@ -24,7 +24,7 @@ export class WorkspaceRolesGuard implements CanActivate {
     const workspaceId = request.params.workspaceId;
 
     if (!workspaceId) {
-      return true;
+      throw new ForbiddenException('Workspace context is required');
     }
 
     if (!request.user) {

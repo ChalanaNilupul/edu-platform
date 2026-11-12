@@ -78,7 +78,7 @@ Frontend functionality:
 
 ## Partially Implemented
 
-- Production RLS enforcement (policies are verified, but the local/CI database role is a superuser, so a non-superuser production role is still required).
+- Production RLS enforcement (policies are verified, and `pnpm db:setup-app-role` provisions a restricted runtime role; startup refuses a superuser or `BYPASSRLS` connection in production).
 - Manual browser verification of the new flows.
 - Runtime verification of rate limiting and Origin checking.
 - Member suspension (removal is implemented).
@@ -296,10 +296,9 @@ See [ROADMAP.md](./ROADMAP.md) for the complete development plan and implementat
 
 1. Manually verify the new flows in a browser.
 2. Verify rate limiting and Origin checking at runtime.
-3. Decide on and provision a non-superuser production database role so RLS is enforced.
-4. Complete the Phase 2 security review.
-5. Build Student Management.
-6. Continue with the remaining LMS and IMS modules.
+3. Add production audit logging for security events (Phase 2 review finding).
+4. Build Student Management.
+5. Continue with the remaining LMS and IMS modules.
 
 ## Security Principles
 
