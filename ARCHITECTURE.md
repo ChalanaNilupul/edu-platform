@@ -274,8 +274,10 @@ These decisions refine, but do not replace, the approved baseline above.
 
 ### Tenant isolation and RLS
 
-- Application-layer isolation is implemented: workspace-scoped queries, active-membership enforcement, server-side role checks and cross-tenant rejection tested with mocked HTTP tests.
-- PostgreSQL RLS is deferred. It requires transaction-scoped tenant context (`SET LOCAL`) that is safe under connection pooling, and it must be implemented and verified together with real-database integration tests. It must not be approximated in a way that leaks tenant context between pooled connections.
+- Application-layer isolation: workspace-scoped queries, active-membership enforcement, server-side role checks and cross-tenant rejection, tested with unit, mocked HTTP and real-database tests.
+- PostgreSQL RLS is enabled and forced on `memberships` and `workspace_invitations`. Policies allow rows when `app.bypass_rls = 'on'`, when `workspace_id` matches `app.workspace_id`, or (memberships only) when `user_id` matches `app.user_id`.
+- `TenantContextService` opens a transaction and sets the context with `set_config(..., true)` (transaction-local), so pooled connections cannot inherit another request's tenant. Every workspace service runs through `runAsTenant` or `runAsUser`; only the token-authenticated invitation lookup uses `runAsSystem`.
+- Verified by `apps/api/test/integration/rls.integration-spec.ts`, which runs the policies as a restricted non-superuser role. PostgreSQL bypasses RLS for superusers and `BYPASSRLS` roles, so production must connect as a dedicated non-superuser application role.
 
 ## 14. Architecture principles
 

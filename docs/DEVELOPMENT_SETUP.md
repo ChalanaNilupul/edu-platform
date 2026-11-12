@@ -121,11 +121,14 @@ pnpm lint
 pnpm typecheck
 pnpm test
 pnpm --filter @edu-platform/api test:e2e
+pnpm --filter @edu-platform/api test:integration
 pnpm build
 pnpm format:check
 ```
 
-`pnpm test` runs unit tests. `test:e2e` runs the mocked HTTP end-to-end suite through supertest; it does not require a database but also does not prove database behavior.
+`pnpm test` runs unit tests. `test:e2e` runs the mocked HTTP end-to-end suite through supertest; it does not require a database but also does not prove database behavior. `test:integration` runs against a real PostgreSQL instance: it creates and migrates a dedicated `edu_platform_test` database, then executes auth, workspace, invitation and RLS tests. PostgreSQL must be running (step 5).
+
+The RLS tests switch to a restricted `edu_rls_test` database role because the local `edu_admin` role is a superuser, and PostgreSQL bypasses RLS for superusers. This matches production expectations: a production deployment must use a non-superuser application role for RLS to be enforced.
 
 GitHub Actions automatically runs these checks when code is pushed to the configured branches.
 

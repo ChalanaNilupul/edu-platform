@@ -2,6 +2,7 @@ import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nest
 
 import { MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TenantContextService } from '../prisma/tenant-context.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
 
@@ -9,6 +10,7 @@ import { WorkspaceAccessService } from './workspace-access.service.js';
 export class WorkspacesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(TenantContextService) private readonly tenant: TenantContextService,
     @Inject(WorkspaceAccessService) private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
 
@@ -26,6 +28,8 @@ export class WorkspacesService {
           createdAt: true,
         },
       });
+
+      await tx.$queryRawUnsafe(`SELECT set_config('app.workspace_id', $1, true)`, workspace.id);
 
       await tx.membership.create({
         data: {
@@ -61,25 +65,27 @@ export class WorkspacesService {
   }
 
   async findAllForUser(userId: string) {
-    const memberships = await this.prisma.membership.findMany({
-      where: {
-        userId,
-        status: MembershipStatus.ACTIVE,
-      },
-      select: {
-        id: true,
-        role: true,
-        workspace: {
-          select: {
-            id: true,
-            name: true,
-            type: true,
-            createdAt: true,
+    const memberships = await this.tenant.runAsUser(userId, (tx) =>
+      tx.membership.findMany({
+        where: {
+          userId,
+          status: MembershipStatus.ACTIVE,
+        },
+        select: {
+          id: true,
+          role: true,
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              createdAt: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'asc' },
-    });
+        orderBy: { createdAt: 'asc' },
+      }),
+    );
 
     return memberships.map((membership) => ({
       ...membership.workspace,
@@ -89,31 +95,33 @@ export class WorkspacesService {
   }
 
   async getById(userId: string, workspaceId: string) {
-    const membership = await this.workspaceAccess.getActiveMembership(userId, workspaceId);
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+      const membership = await this.workspaceAccess.getActiveMembership(userId, workspaceId, tx);
 
-    const workspace = await this.prisma.workspace.findUnique({
-      where: { id: workspaceId },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        createdAt: true,
-      },
+      const workspace = await tx.workspace.findUnique({
+        where: { id: workspaceId },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          createdAt: true,
+        },
+      });
+
+      if (!workspace) {
+        throw new NotFoundException('Workspace not found');
+      }
+
+      return {
+        ...workspace,
+        membershipId: membership.id,
+        role: membership.role,
+      };
     });
-
-    if (!workspace) {
-      throw new NotFoundException('Workspace not found');
-    }
-
-    return {
-      ...workspace,
-      membershipId: membership.id,
-      role: membership.role,
-    };
   }
 
   async switchWorkspace(userId: string, sessionId: string, workspaceId: string) {
-    return this.prisma.$transaction(async (tx) => {
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
       const membership = await tx.membership.findFirst({
         where: {
           userId,

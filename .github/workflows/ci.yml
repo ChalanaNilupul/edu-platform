@@ -54,3 +54,51 @@ jobs:
 
       - name: Build applications
         run: pnpm build
+
+  integration:
+    name: Database Integration Tests
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: edu_admin
+          POSTGRES_PASSWORD: ci_password
+          POSTGRES_DB: edu_platform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U edu_admin -d edu_platform"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://edu_admin:ci_password@localhost:5432/edu_platform?schema=public
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '12.18.0'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        run: pnpm exec prisma generate
+        env:
+          DATABASE_URL: postgresql://edu_admin:ci_password@localhost:5432/edu_platform?schema=public
+
+      - name: Run API integration tests
+        run: pnpm --filter @edu-platform/api test:integration

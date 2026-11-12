@@ -62,6 +62,8 @@ Backend functionality:
 - Predefined workspace roles (owner, admin, branch manager, teacher, student, parent).
 - Workspace invitations with hashed tokens, expiry and revocation.
 - Membership listing, role changes and member removal with role-aware rules.
+- PostgreSQL Row-Level Security on tenant tables with transaction-scoped tenant context.
+- Real-database integration tests (auth, workspace, invitation and RLS coverage) and a CI PostgreSQL job.
 
 Frontend functionality:
 
@@ -76,8 +78,7 @@ Frontend functionality:
 
 ## Partially Implemented
 
-- PostgreSQL Row-Level Security (application-layer tenant isolation is in place).
-- Real-database integration tests.
+- Production RLS enforcement (policies are verified, but the local/CI database role is a superuser, so a non-superuser production role is still required).
 - Manual browser verification of the new flows.
 - Runtime verification of rate limiting and Origin checking.
 - Member suspension (removal is implemented).
@@ -269,6 +270,8 @@ From the repository root:
 pnpm lint
 pnpm typecheck
 pnpm test
+pnpm --filter @edu-platform/api test:e2e
+pnpm --filter @edu-platform/api test:integration
 pnpm build
 pnpm format:check
 ```
@@ -277,7 +280,9 @@ These commands serve different purposes:
 
 - Lint: coding rules and potential issues.
 - Typecheck: TypeScript validation.
-- Test: automated test execution.
+- Test: unit test execution.
+- E2E: mocked HTTP flow tests.
+- Integration: real PostgreSQL tests (creates and migrates a dedicated `edu_platform_test` database; requires a running database).
 - Build: production compilation.
 - Format check: Prettier formatting validation.
 
@@ -289,9 +294,9 @@ See [ROADMAP.md](./ROADMAP.md) for the complete development plan and implementat
 
 ## Current Development Priorities
 
-1. Run database integration tests against a real PostgreSQL instance.
-2. Manually verify the new flows in a browser.
-3. Implement PostgreSQL RLS with transaction-scoped tenant context.
+1. Manually verify the new flows in a browser.
+2. Verify rate limiting and Origin checking at runtime.
+3. Decide on and provision a non-superuser production database role so RLS is enforced.
 4. Complete the Phase 2 security review.
 5. Build Student Management.
 6. Continue with the remaining LMS and IMS modules.
@@ -301,7 +306,7 @@ See [ROADMAP.md](./ROADMAP.md) for the complete development plan and implementat
 - Every workspace-owned record must be tenant-scoped.
 - Backend authorization is mandatory.
 - Workspace membership determines access.
-- PostgreSQL Row-Level Security will provide an additional isolation layer.
+- PostgreSQL Row-Level Security provides an additional isolation layer on tenant tables; the application-facing database role must not be a superuser.
 - Private files must be accessed through backend-authorized short-lived signed URLs.
 - Platform administrator access to private tenant records must be explicitly approved, purpose-limited, time-limited and audited.
 

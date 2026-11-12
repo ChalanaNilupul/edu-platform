@@ -130,10 +130,11 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Enforce workspace membership checks.
 - [x] Implement server-side tenant authorization.
 - [x] Ensure workspace-owned records are tenant-scoped.
-- [ ] Implement PostgreSQL Row-Level Security (deferred, see Batch 1 notes).
-- [ ] Implement transaction-scoped tenant context.
-- [x] Test cross-tenant access prevention (service and HTTP tests).
+- [x] Implement PostgreSQL Row-Level Security on `memberships` and `workspace_invitations`.
+- [x] Implement transaction-scoped tenant context (`set_config(..., true)`).
+- [x] Test cross-tenant access prevention (service, HTTP and real-database tests).
 - [ ] Complete tenant isolation security review.
+- [ ] Provision a dedicated non-superuser application database role (required before RLS protects a production deployment).
 
 ## 2.7 Phase 2 Exit Criteria
 
@@ -142,8 +143,8 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Workspace invitations implemented.
 - [x] Membership management implemented.
 - [x] Tenant authorization implemented.
-- [ ] PostgreSQL RLS implemented and verified.
-- [x] Cross-tenant isolation tests passing (application layer).
+- [x] PostgreSQL RLS implemented and verified against a restricted database role.
+- [x] Cross-tenant isolation tests passing (application layer and real database).
 - [ ] Phase 2 security review completed.
 
 ### Batch 1 completion notes (November 12, 2026)
@@ -161,10 +162,22 @@ Implemented and covered by automated tests:
 
 Verified with unit tests and mocked HTTP end-to-end tests. Not yet verified:
 
-- PostgreSQL RLS and transaction-scoped tenant context.
-- Real database integration tests (requires a running PostgreSQL instance).
 - Browser walkthrough of the new flows.
 - Runtime verification of rate limiting and Origin checking.
+
+### Batch 2 completion notes (November 12, 2026)
+
+Implemented and verified:
+
+- Real PostgreSQL integration suite that creates and migrates a dedicated `edu_platform_test` database, disables throttling for tests, captures mail tokens in memory, and exercises the full HTTP pipeline.
+- 19 database-backed auth/workspace/invitation tests and 7 RLS tests (26 total).
+- PostgreSQL RLS with `ENABLE` + `FORCE ROW LEVEL SECURITY` on `memberships` and `workspace_invitations`.
+- `TenantContextService` with transaction-scoped `app.workspace_id`, `app.user_id` and `app.bypass_rls` settings; the only bypass usage is the token-authenticated invitation lookup.
+- CI job `Database Integration Tests` with a `postgres:17` service container.
+
+Known constraint: the development/CI database user `edu_admin` is a superuser, so PostgreSQL bypasses RLS for it. The policies are proven with a restricted role in the RLS integration spec, but a production deployment must connect as a non-superuser, non-owner role for RLS to take effect. Application-layer tenant filtering remains in place regardless.
+
+Verified: 75 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and `next build`.
 
 # Phase 3 — Student Management
 

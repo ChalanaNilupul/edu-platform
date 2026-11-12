@@ -2,12 +2,12 @@ import { BadRequestException, ForbiddenException, NotFoundException } from '@nes
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
-import type { PrismaService } from '../prisma/prisma.service.js';
+import type { TenantContextService } from '../prisma/tenant-context.service.js';
 import { MembershipsService } from './memberships.service.js';
 import type { WorkspaceAccessService } from './workspace-access.service.js';
 
 describe('MembershipsService', () => {
-  const prismaMock = {
+  const tx = {
     membership: {
       findMany: vi.fn(),
       findFirst: vi.fn(),
@@ -17,7 +17,12 @@ describe('MembershipsService', () => {
     session: {
       updateMany: vi.fn(),
     },
-    $transaction: vi.fn(),
+  };
+
+  const tenantMock = {
+    runAsTenant: vi.fn(),
+    runAsUser: vi.fn(),
+    runAsSystem: vi.fn(),
   };
 
   const workspaceAccessMock = {
@@ -30,12 +35,13 @@ describe('MembershipsService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    prismaMock.$transaction.mockImplementation(async (operations: Promise<unknown>[]) =>
-      Promise.all(operations),
+    tenantMock.runAsTenant.mockImplementation(
+      async (_workspaceId: string, callback: (transaction: typeof tx) => Promise<unknown>) =>
+        callback(tx),
     );
 
     service = new MembershipsService(
-      prismaMock as unknown as PrismaService,
+      tenantMock as unknown as TenantContextService,
       workspaceAccessMock as unknown as WorkspaceAccessService,
     );
   });
@@ -57,14 +63,17 @@ describe('MembershipsService', () => {
         },
       ];
 
-      prismaMock.membership.findMany.mockResolvedValue(members);
+      tx.membership.findMany.mockResolvedValue(members);
 
       const result = await service.list('actor-123', 'workspace-123');
 
-      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith('actor-123', 'workspace-123', [
-        WorkspaceRole.ADMIN,
-      ]);
-      expect(prismaMock.membership.findMany).toHaveBeenCalledWith({
+      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith(
+        'actor-123',
+        'workspace-123',
+        [WorkspaceRole.ADMIN],
+        tx,
+      );
+      expect(tx.membership.findMany).toHaveBeenCalledWith({
         where: { workspaceId: 'workspace-123' },
         select: {
           id: true,
@@ -93,7 +102,7 @@ describe('MembershipsService', () => {
       await expect(service.list('actor-123', 'workspace-123')).rejects.toBeInstanceOf(
         ForbiddenException,
       );
-      expect(prismaMock.membership.findMany).not.toHaveBeenCalled();
+      expect(tx.membership.findMany).not.toHaveBeenCalled();
     });
   });
 
@@ -115,14 +124,17 @@ describe('MembershipsService', () => {
         service.updateRole('actor-123', 'workspace-123', 'membership-123', WorkspaceRole.TEACHER),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
-      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith('actor-123', 'workspace-123', [
-        WorkspaceRole.OWNER,
-      ]);
-      expect(prismaMock.membership.findFirst).not.toHaveBeenCalled();
+      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith(
+        'actor-123',
+        'workspace-123',
+        [WorkspaceRole.OWNER],
+        tx,
+      );
+      expect(tx.membership.findFirst).not.toHaveBeenCalled();
     });
 
     it('rejects an unknown membership', async () => {
-      prismaMock.membership.findFirst.mockResolvedValue(null);
+      tx.membership.findFirst.mockResolvedValue(null);
 
       await expect(
         service.updateRole('actor-123', 'workspace-123', 'missing', WorkspaceRole.TEACHER),
@@ -130,7 +142,7 @@ describe('MembershipsService', () => {
     });
 
     it('rejects changing the owner role', async () => {
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'user-456',
         role: WorkspaceRole.OWNER,
@@ -142,7 +154,7 @@ describe('MembershipsService', () => {
     });
 
     it('rejects promoting a member to owner', async () => {
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'user-456',
         role: WorkspaceRole.TEACHER,
@@ -154,7 +166,7 @@ describe('MembershipsService', () => {
     });
 
     it('rejects changing your own role', async () => {
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'actor-123',
         role: WorkspaceRole.ADMIN,
@@ -166,12 +178,12 @@ describe('MembershipsService', () => {
     });
 
     it('updates the role of another member', async () => {
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'user-456',
         role: WorkspaceRole.TEACHER,
       });
-      prismaMock.membership.update.mockResolvedValue({
+      tx.membership.update.mockResolvedValue({
         id: 'membership-123',
         role: WorkspaceRole.ADMIN,
         status: MembershipStatus.ACTIVE,
@@ -184,7 +196,7 @@ describe('MembershipsService', () => {
         WorkspaceRole.ADMIN,
       );
 
-      expect(prismaMock.membership.update).toHaveBeenCalledWith({
+      expect(tx.membership.update).toHaveBeenCalledWith({
         where: { id: 'membership-123' },
         data: { role: WorkspaceRole.ADMIN },
         select: {
@@ -204,7 +216,7 @@ describe('MembershipsService', () => {
         role: WorkspaceRole.OWNER,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.membership.findFirst.mockResolvedValue(null);
+      tx.membership.findFirst.mockResolvedValue(null);
 
       await expect(service.remove('actor-123', 'workspace-123', 'missing')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -217,7 +229,7 @@ describe('MembershipsService', () => {
         role: WorkspaceRole.OWNER,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'actor-123',
         role: WorkspaceRole.ADMIN,
@@ -234,7 +246,7 @@ describe('MembershipsService', () => {
         role: WorkspaceRole.ADMIN,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'user-456',
         role: WorkspaceRole.OWNER,
@@ -251,7 +263,7 @@ describe('MembershipsService', () => {
         role: WorkspaceRole.ADMIN,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'user-456',
         role: WorkspaceRole.ADMIN,
@@ -260,7 +272,7 @@ describe('MembershipsService', () => {
       await expect(
         service.remove('actor-123', 'workspace-123', 'membership-123'),
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(prismaMock.membership.delete).not.toHaveBeenCalled();
+      expect(tx.membership.delete).not.toHaveBeenCalled();
     });
 
     it('deletes the membership and clears the active workspace of the removed user', async () => {
@@ -269,7 +281,7 @@ describe('MembershipsService', () => {
         role: WorkspaceRole.ADMIN,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.membership.findFirst.mockResolvedValue({
+      tx.membership.findFirst.mockResolvedValue({
         id: 'membership-123',
         userId: 'user-456',
         role: WorkspaceRole.TEACHER,
@@ -277,10 +289,10 @@ describe('MembershipsService', () => {
 
       const result = await service.remove('actor-123', 'workspace-123', 'membership-123');
 
-      expect(prismaMock.membership.delete).toHaveBeenCalledWith({
+      expect(tx.membership.delete).toHaveBeenCalledWith({
         where: { id: 'membership-123' },
       });
-      expect(prismaMock.session.updateMany).toHaveBeenCalledWith({
+      expect(tx.session.updateMany).toHaveBeenCalledWith({
         where: {
           userId: 'user-456',
           activeWorkspaceId: 'workspace-123',

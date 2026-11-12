@@ -14,7 +14,7 @@ import {
   WorkspaceType,
 } from '../generated/prisma/client.js';
 import type { MailService } from '../mail/mail.service.js';
-import type { PrismaService } from '../prisma/prisma.service.js';
+import type { TenantContextService } from '../prisma/tenant-context.service.js';
 import { InvitationsService } from './invitations.service.js';
 import type { WorkspaceAccessService } from './workspace-access.service.js';
 
@@ -23,19 +23,8 @@ describe('InvitationsService', () => {
 
   const tx = {
     membership: {
-      upsert: vi.fn(),
-    },
-    workspaceInvitation: {
-      update: vi.fn(),
-    },
-    session: {
-      updateMany: vi.fn(),
-    },
-  };
-
-  const prismaMock = {
-    membership: {
       findFirst: vi.fn(),
+      upsert: vi.fn(),
     },
     workspace: {
       findUnique: vi.fn(),
@@ -47,7 +36,15 @@ describe('InvitationsService', () => {
       findUnique: vi.fn(),
       update: vi.fn(),
     },
-    $transaction: vi.fn(),
+    session: {
+      updateMany: vi.fn(),
+    },
+  };
+
+  const tenantMock = {
+    runAsTenant: vi.fn(),
+    runAsUser: vi.fn(),
+    runAsSystem: vi.fn(),
   };
 
   const workspaceAccessMock = {
@@ -66,12 +63,16 @@ describe('InvitationsService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
-    prismaMock.$transaction.mockImplementation(
+    tenantMock.runAsTenant.mockImplementation(
+      async (_workspaceId: string, callback: (transaction: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+    );
+    tenantMock.runAsSystem.mockImplementation(
       async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
     );
 
     service = new InvitationsService(
-      prismaMock as unknown as PrismaService,
+      tenantMock as unknown as TenantContextService,
       workspaceAccessMock as unknown as WorkspaceAccessService,
       mailMock as unknown as MailService,
     );
@@ -84,12 +85,12 @@ describe('InvitationsService', () => {
         role: WorkspaceRole.ADMIN,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.membership.findFirst.mockResolvedValue(null);
-      prismaMock.workspace.findUnique.mockResolvedValue({ name: 'My Tuition Class' });
+      tx.membership.findFirst.mockResolvedValue(null);
+      tx.workspace.findUnique.mockResolvedValue({ name: 'My Tuition Class' });
     });
 
     it('normalizes the email, stores only the token hash and sends the invitation', async () => {
-      prismaMock.workspaceInvitation.upsert.mockResolvedValue({
+      tx.workspaceInvitation.upsert.mockResolvedValue({
         id: 'invitation-123',
         email: 'new@example.com',
         role: WorkspaceRole.TEACHER,
@@ -105,11 +106,14 @@ describe('InvitationsService', () => {
         WorkspaceRole.TEACHER,
       );
 
-      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith('actor-123', 'workspace-123', [
-        WorkspaceRole.ADMIN,
-      ]);
+      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith(
+        'actor-123',
+        'workspace-123',
+        [WorkspaceRole.ADMIN],
+        tx,
+      );
 
-      const upsertArgs = prismaMock.workspaceInvitation.upsert.mock.calls[0]![0];
+      const upsertArgs = tx.workspaceInvitation.upsert.mock.calls[0]![0];
       const sentToken = mailMock.sendWorkspaceInvitation.mock.calls[0]![1] as string;
 
       expect(upsertArgs.create).toMatchObject({
@@ -129,7 +133,7 @@ describe('InvitationsService', () => {
         service.create('actor-123', 'workspace-123', 'new@example.com', WorkspaceRole.OWNER),
       ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(prismaMock.workspaceInvitation.upsert).not.toHaveBeenCalled();
+      expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
     });
 
     it('allows only the owner to invite administrators', async () => {
@@ -143,7 +147,7 @@ describe('InvitationsService', () => {
         service.create('actor-123', 'workspace-123', 'new@example.com', WorkspaceRole.ADMIN),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
-      expect(prismaMock.workspaceInvitation.upsert).not.toHaveBeenCalled();
+      expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
     });
 
     it('allows the owner to invite administrators', async () => {
@@ -152,7 +156,7 @@ describe('InvitationsService', () => {
         role: WorkspaceRole.OWNER,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.workspaceInvitation.upsert.mockResolvedValue({
+      tx.workspaceInvitation.upsert.mockResolvedValue({
         id: 'invitation-123',
         email: 'admin@example.com',
         role: WorkspaceRole.ADMIN,
@@ -163,21 +167,21 @@ describe('InvitationsService', () => {
 
       await service.create('actor-123', 'workspace-123', 'admin@example.com', WorkspaceRole.ADMIN);
 
-      expect(prismaMock.workspaceInvitation.upsert).toHaveBeenCalledOnce();
+      expect(tx.workspaceInvitation.upsert).toHaveBeenCalledOnce();
     });
 
     it('rejects inviting an existing member', async () => {
-      prismaMock.membership.findFirst.mockResolvedValue({ id: 'membership-123' });
+      tx.membership.findFirst.mockResolvedValue({ id: 'membership-123' });
 
       await expect(
         service.create('actor-123', 'workspace-123', 'member@example.com', WorkspaceRole.TEACHER),
       ).rejects.toBeInstanceOf(ConflictException);
 
-      expect(prismaMock.workspaceInvitation.upsert).not.toHaveBeenCalled();
+      expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
     });
 
     it('keeps the invitation when the email fails to send', async () => {
-      prismaMock.workspaceInvitation.upsert.mockResolvedValue({
+      tx.workspaceInvitation.upsert.mockResolvedValue({
         id: 'invitation-123',
         email: 'new@example.com',
         role: WorkspaceRole.TEACHER,
@@ -205,11 +209,11 @@ describe('InvitationsService', () => {
         role: WorkspaceRole.ADMIN,
         status: MembershipStatus.ACTIVE,
       });
-      prismaMock.workspaceInvitation.findMany.mockResolvedValue([]);
+      tx.workspaceInvitation.findMany.mockResolvedValue([]);
 
       await service.list('actor-123', 'workspace-123');
 
-      expect(prismaMock.workspaceInvitation.findMany).toHaveBeenCalledWith(
+      expect(tx.workspaceInvitation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: {
             workspaceId: 'workspace-123',
@@ -231,7 +235,7 @@ describe('InvitationsService', () => {
     });
 
     it('rejects an unknown invitation', async () => {
-      prismaMock.workspaceInvitation.findFirst.mockResolvedValue(null);
+      tx.workspaceInvitation.findFirst.mockResolvedValue(null);
 
       await expect(service.revoke('actor-123', 'workspace-123', 'missing')).rejects.toBeInstanceOf(
         NotFoundException,
@@ -239,7 +243,7 @@ describe('InvitationsService', () => {
     });
 
     it('rejects an invitation that is not pending', async () => {
-      prismaMock.workspaceInvitation.findFirst.mockResolvedValue({
+      tx.workspaceInvitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         status: InvitationStatus.ACCEPTED,
       });
@@ -248,18 +252,18 @@ describe('InvitationsService', () => {
         service.revoke('actor-123', 'workspace-123', 'invitation-123'),
       ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(prismaMock.workspaceInvitation.update).not.toHaveBeenCalled();
+      expect(tx.workspaceInvitation.update).not.toHaveBeenCalled();
     });
 
     it('marks a pending invitation as revoked', async () => {
-      prismaMock.workspaceInvitation.findFirst.mockResolvedValue({
+      tx.workspaceInvitation.findFirst.mockResolvedValue({
         id: 'invitation-123',
         status: InvitationStatus.PENDING,
       });
 
       const result = await service.revoke('actor-123', 'workspace-123', 'invitation-123');
 
-      expect(prismaMock.workspaceInvitation.update).toHaveBeenCalledWith({
+      expect(tx.workspaceInvitation.update).toHaveBeenCalledWith({
         where: { id: 'invitation-123' },
         data: { status: InvitationStatus.REVOKED },
       });
@@ -283,13 +287,13 @@ describe('InvitationsService', () => {
     };
 
     it('rejects an unknown token', async () => {
-      prismaMock.workspaceInvitation.findUnique.mockResolvedValue(null);
+      tx.workspaceInvitation.findUnique.mockResolvedValue(null);
 
       await expect(
         service.accept('user-123', 'invitee@example.com', 'session-123', 'unknown'),
       ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(prismaMock.workspaceInvitation.findUnique).toHaveBeenCalledWith({
+      expect(tx.workspaceInvitation.findUnique).toHaveBeenCalledWith({
         where: { tokenHash: sha256('unknown') },
         include: {
           workspace: {
@@ -304,7 +308,7 @@ describe('InvitationsService', () => {
     });
 
     it('rejects an invitation that is no longer pending', async () => {
-      prismaMock.workspaceInvitation.findUnique.mockResolvedValue({
+      tx.workspaceInvitation.findUnique.mockResolvedValue({
         ...invitation,
         status: InvitationStatus.REVOKED,
       });
@@ -315,7 +319,7 @@ describe('InvitationsService', () => {
     });
 
     it('marks an expired invitation as expired', async () => {
-      prismaMock.workspaceInvitation.findUnique.mockResolvedValue({
+      tx.workspaceInvitation.findUnique.mockResolvedValue({
         ...invitation,
         expiresAt: new Date(Date.now() - 60_000),
       });
@@ -324,24 +328,24 @@ describe('InvitationsService', () => {
         service.accept('user-123', 'invitee@example.com', 'session-123', 'token'),
       ).rejects.toBeInstanceOf(BadRequestException);
 
-      expect(prismaMock.workspaceInvitation.update).toHaveBeenCalledWith({
+      expect(tx.workspaceInvitation.update).toHaveBeenCalledWith({
         where: { id: 'invitation-123' },
         data: { status: InvitationStatus.EXPIRED },
       });
     });
 
     it('rejects accepting an invitation for another email address', async () => {
-      prismaMock.workspaceInvitation.findUnique.mockResolvedValue(invitation);
+      tx.workspaceInvitation.findUnique.mockResolvedValue(invitation);
 
       await expect(
         service.accept('user-123', 'other@example.com', 'session-123', 'token'),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
-      expect(prismaMock.$transaction).not.toHaveBeenCalled();
+      expect(tenantMock.runAsTenant).not.toHaveBeenCalled();
     });
 
     it('creates the membership, accepts the invitation and switches the session', async () => {
-      prismaMock.workspaceInvitation.findUnique.mockResolvedValue(invitation);
+      tx.workspaceInvitation.findUnique.mockResolvedValue(invitation);
       tx.membership.upsert.mockResolvedValue({
         id: 'membership-123',
         role: WorkspaceRole.TEACHER,
@@ -409,7 +413,7 @@ describe('InvitationsService', () => {
     });
 
     it('does not touch the session when there is no session id', async () => {
-      prismaMock.workspaceInvitation.findUnique.mockResolvedValue(invitation);
+      tx.workspaceInvitation.findUnique.mockResolvedValue(invitation);
       tx.membership.upsert.mockResolvedValue({
         id: 'membership-123',
         role: WorkspaceRole.TEACHER,

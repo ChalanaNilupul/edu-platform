@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { MembershipStatus, WorkspaceRole, WorkspaceType } from '../generated/prisma/client.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
+import type { TenantContextService } from '../prisma/tenant-context.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
 import type { WorkspaceAccessService } from './workspace-access.service.js';
 import { WorkspacesService } from './workspaces.service.js';
@@ -15,11 +16,14 @@ describe('WorkspacesService', () => {
   };
 
   const tx = {
+    $queryRawUnsafe: vi.fn(),
     workspace: {
       create: vi.fn(),
+      findUnique: vi.fn(),
     },
     membership: {
       create: vi.fn(),
+      findMany: vi.fn(),
       findFirst: vi.fn(),
     },
     session: {
@@ -29,12 +33,12 @@ describe('WorkspacesService', () => {
 
   const prismaMock = {
     $transaction: vi.fn(),
-    membership: {
-      findMany: vi.fn(),
-    },
-    workspace: {
-      findUnique: vi.fn(),
-    },
+  };
+
+  const tenantMock = {
+    runAsTenant: vi.fn(),
+    runAsUser: vi.fn(),
+    runAsSystem: vi.fn(),
   };
 
   const workspaceAccessMock = {
@@ -47,6 +51,7 @@ describe('WorkspacesService', () => {
   beforeEach(() => {
     vi.resetAllMocks();
 
+    tx.$queryRawUnsafe.mockResolvedValue([{ set_config: 'workspace-123' }]);
     tx.workspace.create.mockResolvedValue(workspace);
     tx.membership.create.mockResolvedValue({
       id: 'membership-123',
@@ -56,9 +61,18 @@ describe('WorkspacesService', () => {
     prismaMock.$transaction.mockImplementation(
       async (callback: (transaction: typeof tx) => Promise<unknown>) => callback(tx),
     );
+    tenantMock.runAsTenant.mockImplementation(
+      async (_workspaceId: string, callback: (transaction: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+    );
+    tenantMock.runAsUser.mockImplementation(
+      async (_userId: string, callback: (transaction: typeof tx) => Promise<unknown>) =>
+        callback(tx),
+    );
 
     service = new WorkspacesService(
       prismaMock as unknown as PrismaService,
+      tenantMock as unknown as TenantContextService,
       workspaceAccessMock as unknown as WorkspaceAccessService,
     );
   });
@@ -86,6 +100,11 @@ describe('WorkspacesService', () => {
         createdAt: true,
       },
     });
+
+    expect(tx.$queryRawUnsafe).toHaveBeenCalledWith(
+      `SELECT set_config('app.workspace_id', $1, true)`,
+      workspace.id,
+    );
 
     expect(tx.membership.create).toHaveBeenCalledWith({
       data: {
@@ -121,7 +140,7 @@ describe('WorkspacesService', () => {
 
   it('lists only workspaces with an active membership for the user', async () => {
     const userId = 'user-123';
-    prismaMock.membership.findMany.mockResolvedValue([
+    tx.membership.findMany.mockResolvedValue([
       {
         id: 'membership-123',
         role: WorkspaceRole.TEACHER,
@@ -131,7 +150,8 @@ describe('WorkspacesService', () => {
 
     const result = await service.findAllForUser(userId);
 
-    expect(prismaMock.membership.findMany).toHaveBeenCalledWith({
+    expect(tenantMock.runAsUser).toHaveBeenCalledWith(userId, expect.any(Function));
+    expect(tx.membership.findMany).toHaveBeenCalledWith({
       where: {
         userId,
         status: MembershipStatus.ACTIVE,
@@ -165,13 +185,15 @@ describe('WorkspacesService', () => {
       id: 'membership-123',
       role: WorkspaceRole.ADMIN,
     });
-    prismaMock.workspace.findUnique.mockResolvedValue(workspace);
+    tx.workspace.findUnique.mockResolvedValue(workspace);
 
     const result = await service.getById('user-123', 'workspace-123');
 
+    expect(tenantMock.runAsTenant).toHaveBeenCalledWith('workspace-123', expect.any(Function));
     expect(workspaceAccessMock.getActiveMembership).toHaveBeenCalledWith(
       'user-123',
       'workspace-123',
+      tx,
     );
     expect(result).toEqual({
       ...workspace,
@@ -188,7 +210,7 @@ describe('WorkspacesService', () => {
     await expect(service.getById('user-123', 'workspace-123')).rejects.toBeInstanceOf(
       ForbiddenException,
     );
-    expect(prismaMock.workspace.findUnique).not.toHaveBeenCalled();
+    expect(tx.workspace.findUnique).not.toHaveBeenCalled();
   });
 
   it('returns not found when the workspace was removed after the access check', async () => {
@@ -196,7 +218,7 @@ describe('WorkspacesService', () => {
       id: 'membership-123',
       role: WorkspaceRole.OWNER,
     });
-    prismaMock.workspace.findUnique.mockResolvedValue(null);
+    tx.workspace.findUnique.mockResolvedValue(null);
 
     await expect(service.getById('user-123', 'workspace-123')).rejects.toBeInstanceOf(
       NotFoundException,
@@ -214,6 +236,7 @@ describe('WorkspacesService', () => {
 
     const result = await service.switchWorkspace('user-123', 'session-123', 'workspace-123');
 
+    expect(tenantMock.runAsTenant).toHaveBeenCalledWith('workspace-123', expect.any(Function));
     expect(tx.membership.findFirst).toHaveBeenCalledWith({
       where: {
         userId: 'user-123',

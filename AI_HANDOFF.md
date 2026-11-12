@@ -9,9 +9,10 @@ It records the actual project direction, technical architecture, implementation 
 ## Current state at a glance
 
 - Phase 2 Batch 1 is implemented: workspace roles, memberships, invitations, email verification, password reset, CSRF/security headers, rate limiting and the matching frontend.
-- Verified by 74 unit tests and 33 mocked HTTP E2E tests, plus typecheck, lint, format and a successful `next build`.
-- Not verified: real database integration, PostgreSQL RLS, browser walkthrough, runtime rate-limit and Origin behavior.
-- Nothing has been committed, pushed or merged as part of this work.
+- Phase 2 Batch 2 adds PostgreSQL RLS on `memberships` and `workspace_invitations`, transaction-scoped tenant context, and a real-database integration suite.
+- Verified by 75 unit tests, 33 mocked HTTP E2E tests, 26 real-database integration tests, typecheck, lint, format and a successful `next build`.
+- Still open: browser walkthrough, runtime rate-limit/Origin verification, Phase 2 security review, and a non-superuser database role for production RLS enforcement.
+- Batch 1 commits (`1a85c45`, `c0a4408`) were pushed earlier; Batch 2 is not committed or pushed yet.
 
 ---
 
@@ -338,11 +339,11 @@ All new pages were compiled and built successfully. They have not been walked th
 
 # 10. Testing Status
 
-Current verified results after the Batch 1 (Phase 2) work:
+Current verified results after the Batch 1 and Batch 2 (Phase 2) work:
 
 ## Unit Tests
 
-74 tests passed across 7 files:
+75 tests passed across 7 files:
 
 - Authentication service.
 - Workspace service.
@@ -360,6 +361,15 @@ Current verified results after the Batch 1 (Phase 2) work:
 - Workspace and invitation E2E (19).
 - Application E2E (1).
 
+## Database Integration Tests
+
+26 tests passed against a real PostgreSQL 17 database:
+
+- 19 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle).
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection, cross-tenant update/delete, system bypass and no leakage between transactions.
+
+The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
+
 ## Static Checks
 
 - API typecheck passed.
@@ -370,20 +380,20 @@ Current verified results after the Batch 1 (Phase 2) work:
 
 ## What the mocked tests do not prove
 
-- Database integration (no real PostgreSQL was available locally).
-- PostgreSQL RLS enforcement.
 - Browser behavior and layout of the new pages.
 - Runtime behavior of rate limiting and Origin checking.
+
+Real database behavior is now covered by the integration suite; mocked tests still do not prove it by themselves.
 
 Important testing distinctions:
 
 1. Unit tests validate isolated business logic.
 2. Mock-based HTTP tests validate controller behavior.
-3. Database integration tests validate real database interactions.
+3. Database integration tests validate real database interactions and RLS.
 4. Manual browser tests validate real frontend workflows.
 5. Security testing validates authorization and isolation.
 
-Passing mocked tests does not prove full database integration or tenant security.
+Passing mocked tests does not prove full database integration or tenant security. Passing RLS tests does not prove the deployment is protected: a superuser or `BYPASSRLS` role ignores policies, and the current local/CI role `edu_admin` is both.
 
 Do not claim unverified checks are complete.
 
@@ -409,14 +419,19 @@ Implemented already: dedicated `/workspaces` route, sidebar navigation, active w
 
 ## Tenant Isolation
 
-- Implement PostgreSQL RLS.
-- Set tenant context transaction-safely.
-- Verify pooled connection safety.
-- Add database-backed cross-tenant integration tests.
+- Provision a dedicated non-superuser, non-owner application database role before production deployment; RLS is bypassed for superusers and `BYPASSRLS` roles.
+- Verify pooled connection safety under load (the tenant context is transaction-scoped, but production load testing is still open).
+- Complete the Phase 2 security review.
 
-Implemented already: tenant context resolution through the session's active workspace, active membership enforcement, server-side workspace authorization, workspace-scoped queries, and mocked cross-tenant access tests (403 on cross-tenant resources, 403 on insufficient roles, email-bound invitation acceptance).
+Implemented already: tenant context resolution through the session's active workspace, active membership enforcement, server-side workspace authorization, workspace-scoped queries, mocked cross-tenant access tests, and PostgreSQL RLS on `memberships` and `workspace_invitations` with `FORCE ROW LEVEL SECURITY`.
 
-The application-layer isolation is complete for the models that exist today. PostgreSQL RLS is deliberately deferred: it requires a connection-pool-safe transaction-scoped `SET LOCAL` strategy that is a structural change, and it should be implemented together with database-backed integration tests rather than mocked tests.
+### How RLS is wired
+
+- `prisma/migrations/20261112160000_tenant_row_level_security` enables and forces RLS on both tables.
+- Policies allow a row when `app.bypass_rls = 'on'`, when `workspace_id` matches `app.workspace_id`, or (memberships only) when `user_id` matches `app.user_id`.
+- `TenantContextService` runs every tenant query inside `prisma.$transaction` and sets the context with `set_config(..., true)`, so a pooled connection cannot inherit another request's workspace after commit.
+- All workspace services use `runAsTenant`; the memberships list uses `runAsUser`; the token-authenticated invitation lookup in `InvitationsService.accept` uses `runAsSystem`.
+- `apps/api/test/integration/rls.integration-spec.ts` switches to a restricted role (`edu_rls_test`) because the development role is a superuser and would otherwise bypass every policy.
 
 # 12. Approved Architecture Decisions
 
@@ -637,14 +652,12 @@ Do not prioritize these before the core product is working:
 
 Follow this order:
 
-1. Start PostgreSQL locally and run database integration tests (migrations + Prisma against a real database).
-2. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
-3. Verify rate limiting and Origin checking at runtime.
-4. Implement PostgreSQL RLS with transaction-scoped tenant context and add cross-tenant integration tests.
-5. Complete the Phase 2 security review.
-6. Start Phase 3 — Student Management.
+1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
+2. Verify rate limiting and Origin checking at runtime.
+3. Complete the Phase 2 security review, including a decision on a dedicated non-superuser production database role.
+4. Start Phase 3 — Student Management.
 
-Do not add student, attendance or finance modules before steps 1–5 are done. The application-layer authorization is in place, but the RLS layer and real-database verification are still open.
+Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests and RLS are in place; browser verification, runtime security checks and the production-role decision remain open.
 
 # 17. Development Rules for AI Assistance
 

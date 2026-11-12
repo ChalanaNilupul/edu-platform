@@ -34,10 +34,16 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     WorkspacesModule,
   ],
   providers: [
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
+    // Rate limiting is exercised separately; disable it for database integration
+    // tests that issue many requests from a single address.
+    ...(process.env.NODE_ENV === 'test'
+      ? []
+      : [
+          {
+            provide: APP_GUARD,
+            useClass: ThrottlerGuard,
+          },
+        ]),
   ],
 })
 export class AppModule {}
