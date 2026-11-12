@@ -1,6 +1,6 @@
 # EduPlatform — AI Development Handoff
 
-Last updated: November 12, 2026
+Last updated: November 13, 2026
 
 This document is the current development handoff and implementation reference for AI-assisted development.
 
@@ -13,9 +13,10 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 2 Batch 3 applies the security review fixes: a restricted runtime database role with a production startup check, required `NODE_ENV`, `TRUST_PROXY` support, a stricter login redirect and a fail-closed roles guard.
 - Invitation onboarding is hardened: acceptance requires a verified email address, and the acceptance page guides unverified invitees through verification. Registration now preserves the invitation `next` target.
 - Security-event audit logging (finding M4) is implemented as an append-only `audit_events` table written through a best-effort `AuditService`.
-- Verified by 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and a successful `next build`.
-- Still open: browser walkthrough, runtime rate-limit/Origin verification, email-verification enforcement for other workspace actions, and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix) and `18b8bbd` (invitation onboarding) were pushed to `feat/phase-2-rbac-invitations`; the audit-logging changes are not committed yet.
+- Phase 3 Batch 1 is implemented: workspace-scoped student profiles with RLS, a students REST module, audit events, and a web directory with detail/create/edit pages.
+- Verified by 98 unit tests, 44 mocked HTTP E2E tests, 33 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner/teacher walkthrough of the student directory.
+- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian links and CSV import, and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding) and `6b4b29e` (audit logging) were pushed to `feat/phase-2-rbac-invitations`; Phase 3 batch 1 is on `feat/phase-3-student-profiles` and is not committed yet.
 
 ---
 
@@ -46,13 +47,13 @@ https://github.com/ChalanaNilupul/edu-platform
 
 Current development branch:
 
-`feat/phase-2-rbac-invitations`
+`feat/phase-3-student-profiles`
 
 Current development phase:
 
-**Phase 2 — Identity and Workspace Foundation**
+**Phase 3 — Student Management (batch 1 delivered)**
 
-Do not assume that Phase 2 has been merged into `main`.
+Do not assume that Phase 2 or Phase 3 has been merged into `main`.
 
 The actual local Git state must be checked before proposing commits, pushes or merges.
 
@@ -212,6 +213,16 @@ Single-use, hashed tokens attached to a user with an expiry.
 - Verification/reset tokens are marked as used (or deleted) after consumption.
 - Password reset revokes the user's existing sessions.
 
+## Student
+
+Workspace-owned student record; students do not have logins in this batch.
+
+- Fields: `studentCode` (optional, unique per workspace), `firstName` (required), `lastName`, `dateOfBirth`, `gender`, `email`, `phone`, address parts, `school`, `grade`.
+- Status values: `ACTIVE`, `INACTIVE`, `GRADUATED`, `WITHDRAWN`. Gender values: `MALE`, `FEMALE`, `OTHER`.
+- `(workspaceId, studentCode)` is unique; indexes cover `(workspaceId, status)` and `(workspaceId, firstName, lastName)`.
+- `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy as the other tenant tables.
+- Guardian links, enrollment and CSV import are intentionally deferred to later batches.
+
 # 7. Authentication Implementation
 
 Implemented backend functionality:
@@ -320,7 +331,11 @@ Current application routes include:
 ├── /verify-email
 ├── /invitations/accept
 └── /workspaces
-    └── /workspaces/[workspaceId]/members
+    ├── /workspaces/[workspaceId]/members
+    └── /workspaces/[workspaceId]/students
+        ├── /workspaces/[workspaceId]/students/new
+        └── /workspaces/[workspaceId]/students/[studentId]
+            └── /workspaces/[workspaceId]/students/[studentId]/edit
 ```
 
 The dashboard currently contains:
@@ -339,40 +354,56 @@ They must not be represented as real student, attendance, finance or timetable r
 
 The final dashboard must retrieve workspace-scoped information from the relevant backend modules.
 
-All new pages were compiled and built successfully. They have not been walked through in a browser yet because a local PostgreSQL instance was unavailable during development.
+The students directory, detail, create and edit pages were walked through in a browser against the dev API: owner create → detail → edit (including status change) and teacher read-only access (no Add button, restricted edit page). The same walkthrough confirmed `STUDENT_CREATED`, `STUDENT_UPDATED` and `STUDENT_STATUS_CHANGED` rows in `audit_events`.
+
+# 9A. Phase 3 — Student Implementation
+
+Delivered in batch 1 (profiles + directory core):
+
+- API: `apps/api/src/students/` (controller, service, DTOs, module). Routes: `GET/POST /workspaces/:workspaceId/students`, `GET/PATCH /workspaces/:workspaceId/students/:studentId`.
+- Access: reads for OWNER/ADMIN/BRANCH_MANAGER/TEACHER, writes for OWNER/ADMIN/BRANCH_MANAGER, enforced twice (guard plus `WorkspaceAccessService.requireRoles`).
+- List: case-insensitive search over first name, last name, code, email and phone; optional status filter; `page`/`pageSize` capped at 100 (default 20); alphabetical order.
+- Create/update accept blank optional values as `null`; a duplicate `studentCode` returns 409. Update diffs the submitted fields against the stored row, so a form save with no changes writes neither a database update nor an audit event.
+- Audit: `STUDENT_CREATED`, `STUDENT_UPDATED` (changed field names) and `STUDENT_STATUS_CHANGED` (`from`/`to`). No student PII is stored in metadata.
+- Web: `apps/web/src/lib/workspace-session.ts` (shared session fetch and role helpers), `apps/web/src/components/student-form.tsx`, and the directory/detail/create/edit routes. The sidebar "Students" entry points at the active workspace.
+- Known gap: when the session has no `activeWorkspaceId`, the Students entry is shown as disabled until the user switches workspace once.
 
 # 10. Testing Status
 
-Current verified results after the Batch 1 and Batch 2 (Phase 2) work:
+Current verified results after Phase 3 batch 1:
 
 ## Unit Tests
 
-83 tests passed across 9 files:
+98 tests passed across 11 files:
 
 - Authentication service.
 - Workspace service.
 - Workspace access service.
 - Memberships service.
 - Invitations service.
+- Students service.
 - Session guard.
 - Workspace roles guard.
 - App setup (`TRUST_PROXY` parsing).
 - Database role startup check.
+- Health controller.
 
 ## E2E HTTP Tests
 
-33 tests passed across 3 files:
+44 tests passed across 4 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
+- Students E2E (11).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-27 tests passed against a real PostgreSQL 17 database:
+33 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection, cross-tenant update/delete, system bypass and no leakage between transactions.
+- 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships and students), cross-tenant update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -380,13 +411,14 @@ The suite creates and migrates its own `edu_platform_test` database. Run it with
 
 - API typecheck passed.
 - API lint passed.
+- API build passed.
 - Web lint passed.
 - Prettier format check passed.
 - `next build` compiled successfully for all routes.
 
 ## What the mocked tests do not prove
 
-- Browser behavior and layout of the new pages.
+- Layout quality of the pages (the student flow was walked through, but visual polish was not reviewed).
 - Runtime behavior of rate limiting and Origin checking.
 
 Real database behavior is now covered by the integration suite; mocked tests still do not prove it by themselves.
@@ -452,6 +484,12 @@ Implemented already: tenant context resolution through the session's active work
 - `apps/api/test/integration/rls.integration-spec.ts` switches to a restricted role (`edu_rls_test`) because the development role is a superuser and would otherwise bypass every policy.
 - `pnpm db:setup-app-role` creates or updates the runtime role from `DATABASE_APP_URL` with `NOSUPERUSER`, `NOBYPASSRLS` and DML-only grants. Runtime uses `DATABASE_APP_URL` when set, otherwise `DATABASE_URL`.
 - `main.ts` calls `assertRestrictedDatabaseRole` at startup: production refuses a superuser or `BYPASSRLS` connection; other environments log a warning.
+
+## Phase 3 Remaining Work
+
+- Student profiles and directory (3.1, 3.4) are delivered; guardians (3.2), enrollment (3.3) and CSV import (3.5) remain.
+- `STUDENT` and `PARENT` memberships still have no student-directory read access by design; revisit when the student portal phase starts.
+- Users without an active workspace must switch workspace once before the Students sidebar entry becomes a link.
 
 # 12. Approved Architecture Decisions
 
@@ -577,13 +615,12 @@ After Phase 2, development should follow this sequence.
 
 ## Phase 3 — Student Management
 
-- Student profiles.
+Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, and workspace-scoped RLS plus audit events.
+
+Still open:
+
 - Parent and guardian information.
 - Student enrollment.
-- Student directory.
-- Search and filtering.
-- Pagination.
-- Student editing.
 - CSV import with validation.
 
 ## Phase 4 — Teacher Management

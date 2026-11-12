@@ -1,10 +1,10 @@
 # EduPlatform Development Roadmap
 
-Last updated: November 12, 2026
+Last updated: November 13, 2026
 
 ## Project Status
 
-**Current Phase: Phase 2 — Identity and Workspace Foundation**
+**Current Phase: Phase 3 — Student Management (batch 1 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -219,16 +219,29 @@ Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration 
 
 # Phase 3 — Student Management
 
-**Status: Not Started**
+**Status: In progress — batch 1 (profiles + directory core) delivered**
+
+### Student profiles and directory notes (November 13, 2026)
+
+Students are workspace records with no login of their own; guardian links and CSV import are deferred.
+
+- `students` table (migration `20261112184452_add_students`) with `ACTIVE/INACTIVE/GRADUATED/WITHDRAWN` status, optional personal, contact and academic fields, a per-workspace unique `student_code`, and RLS policies matching the other tenant tables.
+- REST routes under `/workspaces/:workspaceId/students`: list (search, status filter, pagination), detail, create and partial update.
+- Read access: OWNER (override), ADMIN, BRANCH_MANAGER, TEACHER. Write access: OWNER (override), ADMIN, BRANCH_MANAGER.
+- Audit events `STUDENT_CREATED`, `STUDENT_UPDATED` and `STUDENT_STATUS_CHANGED` store IDs and changed field names only; updates are diffed against the stored row so a save with no changes writes no event.
+- Web UI: directory with search/filter/pagination, student detail, create and edit forms, plus role-aware navigation. Users with no active workspace see the Students nav item disabled until they switch workspace.
+- Runtime role needs the new table: run `pnpm exec prisma migrate deploy` and `pnpm db:setup-app-role`.
+
+Verified: 98 unit tests, 44 mocked HTTP E2E tests, 33 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner/teacher walkthrough of the directory.
 
 ## 3.1 Student Profiles
 
-- [ ] Implement student registration.
-- [ ] Implement student profile management.
-- [ ] Store student contact information.
-- [ ] Store student academic information.
-- [ ] Implement student profile editing.
-- [ ] Implement student status management.
+- [x] Implement student registration.
+- [x] Implement student profile management.
+- [x] Store student contact information.
+- [x] Store student academic information.
+- [x] Implement student profile editing.
+- [x] Implement student status management.
 
 ## 3.2 Parent and Guardian Management
 
@@ -247,11 +260,11 @@ Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration 
 
 ## 3.4 Student Directory
 
-- [ ] Implement student listing.
-- [ ] Implement search.
-- [ ] Implement filtering.
-- [ ] Implement pagination.
-- [ ] Implement student detail pages.
+- [x] Implement student listing.
+- [x] Implement search.
+- [x] Implement filtering.
+- [x] Implement pagination.
+- [x] Implement student detail pages.
 
 ## 3.5 Student Import
 

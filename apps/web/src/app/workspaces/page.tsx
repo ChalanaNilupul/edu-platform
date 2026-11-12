@@ -33,7 +33,13 @@ export default async function WorkspacesPage() {
   const data = await response.json();
 
   return (
-    <DashboardShell user={data.user} activePage="Workspaces">
+    <DashboardShell
+      user={data.user}
+      activePage="Workspaces"
+      studentsHref={
+        data.activeWorkspaceId ? `/workspaces/${data.activeWorkspaceId}/students` : undefined
+      }
+    >
       <div className="mb-8">
         <p className="text-sm font-medium text-blue-600">Workspace management</p>
 

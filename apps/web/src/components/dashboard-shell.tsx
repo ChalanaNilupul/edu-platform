@@ -69,11 +69,17 @@ type DashboardUser = {
 
 type DashboardShellProps = {
   user: DashboardUser;
-  activePage?: 'Dashboard' | 'Workspaces';
+  activePage?: 'Dashboard' | 'Workspaces' | 'Students';
+  studentsHref?: string;
   children?: ReactNode;
 };
 
-export function DashboardShell({ user, activePage = 'Dashboard', children }: DashboardShellProps) {
+export function DashboardShell({
+  user,
+  activePage = 'Dashboard',
+  studentsHref,
+  children,
+}: DashboardShellProps) {
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
   const initials = fullName
     .split(' ')
@@ -114,6 +120,7 @@ export function DashboardShell({ user, activePage = 'Dashboard', children }: Das
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = item.label === activePage;
+              const href = item.label === 'Students' ? studentsHref : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive
@@ -121,11 +128,11 @@ export function DashboardShell({ user, activePage = 'Dashboard', children }: Das
                   : 'text-blue-100/80 hover:bg-white/10 hover:text-white'
               }`;
 
-              if (item.href) {
+              if (href) {
                 return (
                   <Link
                     key={item.label}
-                    href={item.href}
+                    href={href}
                     aria-current={isActive ? 'page' : undefined}
                     className={className}
                   >

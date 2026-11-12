@@ -58,7 +58,11 @@ export default async function WorkspaceMembersPage({ params }: MembersPageProps)
 
   if (workspaceResponse.status === 403) {
     return (
-      <DashboardShell user={session.user} activePage="Workspaces">
+      <DashboardShell
+        user={session.user}
+        activePage="Workspaces"
+        studentsHref={`/workspaces/${workspaceId}/students`}
+      >
         <section className="rounded-2xl border border-amber-200 bg-amber-50 p-6">
           <p className="flex items-center gap-2 font-semibold text-amber-800">
             <ShieldAlert size={20} />
@@ -81,7 +85,11 @@ export default async function WorkspaceMembersPage({ params }: MembersPageProps)
 
   if (workspaceResponse.status === 404) {
     return (
-      <DashboardShell user={session.user} activePage="Workspaces">
+      <DashboardShell
+        user={session.user}
+        activePage="Workspaces"
+        studentsHref={`/workspaces/${workspaceId}/students`}
+      >
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h1 className="text-lg font-bold text-slate-900">Workspace not found</h1>
           <p className="mt-2 text-sm text-slate-500">
@@ -124,7 +132,11 @@ export default async function WorkspaceMembersPage({ params }: MembersPageProps)
   }
 
   return (
-    <DashboardShell user={session.user} activePage="Workspaces">
+    <DashboardShell
+      user={session.user}
+      activePage="Workspaces"
+      studentsHref={`/workspaces/${workspace.id}/students`}
+    >
       <div className="mb-8">
         <Link
           href="/workspaces"

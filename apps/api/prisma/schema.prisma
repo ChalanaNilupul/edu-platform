@@ -33,6 +33,19 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+  WITHDRAWN
+}
+
+enum StudentGender {
+  MALE
+  FEMALE
+  OTHER
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -48,6 +61,9 @@ enum AuditEventType {
   INVITATION_CREATED
   INVITATION_REVOKED
   INVITATION_ACCEPTED
+  STUDENT_CREATED
+  STUDENT_UPDATED
+  STUDENT_STATUS_CHANGED
 }
 
 model User {
@@ -79,9 +95,39 @@ model Workspace {
 
   memberships    Membership[]
   invitations    WorkspaceInvitation[]
+  students       Student[]
   activeSessions Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
+}
+
+model Student {
+  id           String         @id @default(uuid())
+  workspaceId  String         @map("workspace_id")
+  studentCode  String?        @map("student_code")
+  firstName    String         @map("first_name")
+  lastName     String?        @map("last_name")
+  dateOfBirth  DateTime?      @map("date_of_birth") @db.Date
+  gender       StudentGender?
+  email        String?
+  phone        String?
+  addressLine1 String?        @map("address_line1")
+  addressLine2 String?        @map("address_line2")
+  city         String?
+  district     String?
+  postalCode   String?        @map("postal_code")
+  school       String?
+  grade        String?
+  status       StudentStatus  @default(ACTIVE)
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, studentCode])
+  @@index([workspaceId, status])
+  @@index([workspaceId, firstName, lastName])
+  @@map("students")
 }
 
 model Membership {
