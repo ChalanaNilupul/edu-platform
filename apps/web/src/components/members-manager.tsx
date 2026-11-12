@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { ApiError, apiFetch } from '@/lib/api';
+import { formatDate } from '@/lib/format-date';
 
 type WorkspaceRole = 'OWNER' | 'ADMIN' | 'BRANCH_MANAGER' | 'TEACHER' | 'STUDENT' | 'PARENT';
 
@@ -288,8 +289,7 @@ export function MembersManager({
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{invitation.email}</p>
                   <p className="mt-1 text-xs text-slate-500">
-                    {roleLabels[invitation.role]} · expires{' '}
-                    {new Date(invitation.expiresAt).toLocaleDateString()}
+                    {roleLabels[invitation.role]} · expires {formatDate(invitation.expiresAt)}
                   </p>
                 </div>
 
