@@ -40,6 +40,9 @@ jobs:
       - name: Run automated tests
         run: pnpm test
 
+      - name: Run API end-to-end tests
+        run: pnpm --filter @edu-platform/api test:e2e
+
       - name: Run type checks
         run: pnpm typecheck
 

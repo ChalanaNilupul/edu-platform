@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -13,23 +12,43 @@ enum WorkspaceType {
   INSTITUTE
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  BRANCH_MANAGER
+  TEACHER
+  STUDENT
+  PARENT
+}
+
 enum MembershipStatus {
   ACTIVE
   SUSPENDED
 }
 
-model User {
-  id           String       @id @default(uuid())
-  email        String       @unique
-  passwordHash String       @map("password_hash")
-  firstName    String       @map("first_name")
-  lastName     String?      @map("last_name")
-  emailVerifiedAt DateTime? @map("email_verified_at")
-  createdAt    DateTime     @default(now()) @map("created_at")
-  updatedAt    DateTime     @updatedAt @map("updated_at")
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
 
-  memberships Membership[]
-  sessions Session[]
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String    @map("password_hash")
+  firstName       String    @map("first_name")
+  lastName        String?   @map("last_name")
+  emailVerifiedAt DateTime? @map("email_verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  memberships            Membership[]
+  sessions               Session[]
+  invitationsSent        WorkspaceInvitation[]    @relation("InvitationInvitedBy")
+  invitationsAccepted    WorkspaceInvitation[]    @relation("InvitationAcceptedBy")
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens    PasswordResetToken[]
 
   @@map("users")
 }
@@ -41,8 +60,9 @@ model Workspace {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  memberships Membership[]
-  activeSessions Session[] @relation("SessionActiveWorkspace")
+  memberships    Membership[]
+  invitations    WorkspaceInvitation[]
+  activeSessions Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
 }
@@ -51,15 +71,69 @@ model Membership {
   id          String           @id @default(uuid())
   userId      String           @map("user_id")
   workspaceId String           @map("workspace_id")
+  role        WorkspaceRole    @default(TEACHER)
   status      MembershipStatus @default(ACTIVE)
   createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
 
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])
+  @@index([workspaceId, role])
   @@map("memberships")
+}
+
+model WorkspaceInvitation {
+  id           String           @id @default(uuid())
+  workspaceId  String           @map("workspace_id")
+  email        String
+  role         WorkspaceRole    @default(TEACHER)
+  tokenHash    String           @unique @map("token_hash")
+  status       InvitationStatus @default(PENDING)
+  invitedById  String           @map("invited_by_id")
+  acceptedById String?          @map("accepted_by_id")
+  expiresAt    DateTime         @map("expires_at")
+  acceptedAt   DateTime?        @map("accepted_at")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  workspace  Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  invitedBy  User      @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: Restrict)
+  acceptedBy User?     @relation("InvitationAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId, status])
+  @@index([email, status])
+  @@map("workspace_invitations")
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("email_verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
 }
 
 model DatabaseHealth {
@@ -70,15 +144,14 @@ model DatabaseHealth {
 }
 
 model Session {
-  id                String    @id @default(uuid())
-  userId            String    @map("user_id")
-  tokenHash         String    @unique @map("token_hash")
-  expiresAt         DateTime  @map("expires_at")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  activeWorkspaceId String? @map("active_workspace_id")
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  tokenHash         String   @unique @map("token_hash")
+  expiresAt         DateTime @map("expires_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  activeWorkspaceId String?  @map("active_workspace_id")
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   activeWorkspace Workspace? @relation("SessionActiveWorkspace", fields: [activeWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])

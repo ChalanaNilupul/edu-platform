@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-import type { Request, Response, NextFunction } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 
 import { AppModule } from './app.module.js';
 
@@ -12,17 +12,23 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
   const allowedOrigin = configService.getOrThrow<string>('CORS_ORIGIN');
+  const nodeEnv = configService.get<string>('NODE_ENV', 'development');
 
-  // Parse cookies from incoming requests
   app.use(cookieParser());
 
-  // Configure frontend access
   app.enableCors({
     origin: allowedOrigin,
     credentials: true,
   });
 
-  // Basic CSRF protection using the Origin header
+  app.use((_req: Request, res: Response, next: NextFunction) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    return next();
+  });
+
+  // CSRF defence for cookie-authenticated state-changing requests.
   app.use((req: Request, res: Response, next: NextFunction) => {
     const unsafeMethods = ['POST', 'PUT', 'PATCH', 'DELETE'];
 
@@ -31,21 +37,35 @@ async function bootstrap() {
     }
 
     const origin = req.headers.origin;
+    const referer = req.headers.referer;
 
-    // Reject requests from unexpected origins
-    if (origin && origin !== allowedOrigin) {
-      return res.status(403).json({
-        message: 'Forbidden origin',
-      });
+    if (origin) {
+      if (origin !== allowedOrigin) {
+        return res.status(403).json({ message: 'Forbidden origin' });
+      }
+
+      return next();
+    }
+
+    if (referer) {
+      if (referer !== allowedOrigin && !referer.startsWith(`${allowedOrigin}/`)) {
+        return res.status(403).json({ message: 'Forbidden origin' });
+      }
+
+      return next();
+    }
+
+    // Browsers always send Origin or Referer for unsafe requests. Requests that
+    // carry a session cookie without either header are rejected to prevent CSRF.
+    if (req.cookies?.edu_session) {
+      return res.status(403).json({ message: 'Missing request origin' });
     }
 
     return next();
   });
 
-  // API prefix
   app.setGlobalPrefix('api/v1');
 
-  // Validate incoming request data
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -54,24 +74,28 @@ async function bootstrap() {
     }),
   );
 
-  // Swagger API documentation
-  const swaggerConfig = new DocumentBuilder()
-    .setTitle('EduPlatform API')
-    .setDescription('REST API for the EduPlatform education management platform.')
-    .setVersion('1.0')
-    .addCookieAuth('edu_session')
-    .build();
+  if (nodeEnv !== 'production') {
+    const swaggerConfig = new DocumentBuilder()
+      .setTitle('EduPlatform API')
+      .setDescription('REST API for the EduPlatform education management platform.')
+      .setVersion('1.0')
+      .addCookieAuth('edu_session')
+      .build();
 
-  const document = SwaggerModule.createDocument(app, swaggerConfig);
+    const document = SwaggerModule.createDocument(app, swaggerConfig);
 
-  SwaggerModule.setup('api/docs', app, document);
+    SwaggerModule.setup('api/docs', app, document);
+  }
 
-  const port = configService.get<number>('PORT', 3000);
+  const port = configService.get<number>('PORT', 4000);
 
   await app.listen(port);
 
   console.log(`EduPlatform API running at http://localhost:${port}/api/v1`);
-  console.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+
+  if (nodeEnv !== 'production') {
+    console.log(`Swagger documentation: http://localhost:${port}/api/docs`);
+  }
 }
 
 await bootstrap();

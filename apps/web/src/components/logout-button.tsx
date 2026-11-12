@@ -1,9 +1,13 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { LogOut, Loader2, X, AlertCircle } from 'lucide-react';
 
+import { apiFetch } from '@/lib/api';
+
 export function LogoutButton() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState('');
@@ -13,18 +17,10 @@ export function LogoutButton() {
     setError('');
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
+      await apiFetch('/auth/logout', { method: 'POST' });
 
-      const response = await fetch(`${apiUrl}/auth/logout`, {
-        method: 'POST',
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        throw new Error('Unable to sign out. Please try again.');
-      }
-
-      window.location.assign('/login');
+      router.push('/login');
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
       setLoading(false);

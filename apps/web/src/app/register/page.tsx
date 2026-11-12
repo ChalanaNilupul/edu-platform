@@ -1,10 +1,14 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { GraduationCap, Loader2 } from 'lucide-react';
 
+import { ApiError, apiFetch } from '@/lib/api';
+
 export default function RegisterPage() {
+  const router = useRouter();
   const [firstName, setFirstName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,28 +21,14 @@ export default function RegisterPage() {
     setLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
-
-      const response = await fetch(`${apiUrl}/auth/register`, {
+      await apiFetch('/auth/register', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstName, email, password }),
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          Array.isArray(data.message)
-            ? data.message.join(', ')
-            : data.message || 'Registration failed.',
-        );
-      }
-
-      window.location.href = '/login?registered=true';
+      router.push('/login?registered=true');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong.');
-    } finally {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong.');
       setLoading(false);
     }
   }

@@ -1,26 +1,41 @@
-import { Body, Controller, HttpCode, HttpStatus, Inject, Post } from '@nestjs/common';
-
-import { AuthService } from './auth.service.js';
-import { RegisterDto } from './dto/register.dto.js';
-
-import { Res, UsePipes, ValidationPipe } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+  UsePipes,
+  ValidationPipe,
+} from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Response } from 'express';
 
-// Keep LoginDto as a runtime import for validation.
+import { CurrentUser } from '../common/decorators/current-user.decorator.js';
+import type {
+  AuthenticatedRequest,
+  AuthenticatedUser,
+} from '../common/types/authenticated-request.js';
+import { AuthService } from './auth.service.js';
+import { ForgotPasswordDto } from './dto/forgot-password.dto.js';
 import { LoginDto } from './dto/login.dto.js';
+import { RegisterDto } from './dto/register.dto.js';
+import { ResetPasswordDto } from './dto/reset-password.dto.js';
+import { VerifyEmailDto } from './dto/verify-email.dto.js';
+import { SessionAuthGuard } from './session-auth.guard.js';
 
-import { Get, Req } from '@nestjs/common';
-import type { Request } from 'express';
-
-import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
-import { UseGuards } from '@nestjs/common';
+const FIVE_PER_MINUTE = { default: { limit: 5, ttl: 60_000 } };
+const THREE_PER_MINUTE = { default: { limit: 3, ttl: 60_000 } };
 
 @Controller('auth')
 export class AuthController {
-  constructor(
-    @Inject(AuthService)
-    private readonly authService: AuthService,
-  ) {}
+  constructor(@Inject(AuthService) private readonly authService: AuthService) {}
+
+  @Throttle(FIVE_PER_MINUTE)
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @UsePipes(new ValidationPipe({ expectedType: RegisterDto }))
@@ -28,8 +43,7 @@ export class AuthController {
     return this.authService.register(dto);
   }
 
-  @UseGuards(ThrottlerGuard)
-  @Throttle({ default: { limit: 5, ttl: 60000 } })
+  @Throttle(FIVE_PER_MINUTE)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @UsePipes(new ValidationPipe({ expectedType: LoginDto }))
@@ -50,24 +64,24 @@ export class AuthController {
     };
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get('me')
-  async me(@Req() request: Request) {
-    const sessionToken = request.cookies?.edu_session as string | undefined;
-
-    const session = await this.authService.getCurrentSession(sessionToken);
-
+  me(@Req() request: AuthenticatedRequest) {
     return {
-      user: session.user,
-      activeWorkspaceId: session.activeWorkspaceId,
+      user: request.user,
+      activeWorkspaceId: request.activeWorkspaceId,
     };
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  async logout(@Req() request: Request, @Res({ passthrough: true }) response: Response) {
-    const sessionToken = request.cookies?.edu_session as string | undefined;
-
-    const result = await this.authService.logout(sessionToken);
+  async logout(
+    @Req() request: AuthenticatedRequest,
+    @Res({ passthrough: true }) response: Response,
+  ) {
+    const result = await this.authService.logout(
+      request.cookies?.edu_session as string | undefined,
+    );
 
     response.clearCookie('edu_session', {
       httpOnly: true,
@@ -77,5 +91,37 @@ export class AuthController {
     });
 
     return result;
+  }
+
+  @Throttle(FIVE_PER_MINUTE)
+  @Post('email/verify')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ expectedType: VerifyEmailDto }))
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto.token);
+  }
+
+  @Throttle(THREE_PER_MINUTE)
+  @UseGuards(SessionAuthGuard)
+  @Post('email/resend')
+  @HttpCode(HttpStatus.OK)
+  resendEmailVerification(@CurrentUser() user: AuthenticatedUser) {
+    return this.authService.resendEmailVerification(user.id);
+  }
+
+  @Throttle(THREE_PER_MINUTE)
+  @Post('password/forgot')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ expectedType: ForgotPasswordDto }))
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto.email);
+  }
+
+  @Throttle(FIVE_PER_MINUTE)
+  @Post('password/reset')
+  @HttpCode(HttpStatus.OK)
+  @UsePipes(new ValidationPipe({ expectedType: ResetPasswordDto }))
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.token, dto.password);
   }
 }

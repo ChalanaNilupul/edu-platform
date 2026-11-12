@@ -1,11 +1,16 @@
-import { ForbiddenException, Inject, Injectable } from '@nestjs/common';
-import { MembershipStatus } from '../generated/prisma/client.js';
+import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+
+import { MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
+import { WorkspaceAccessService } from './workspace-access.service.js';
 
 @Injectable()
 export class WorkspacesService {
-  constructor(@Inject(PrismaService) private readonly prisma: PrismaService) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: PrismaService,
+    @Inject(WorkspaceAccessService) private readonly workspaceAccess: WorkspaceAccessService,
+  ) {}
 
   async create(userId: string, sessionId: string, dto: CreateWorkspaceDto) {
     return this.prisma.$transaction(async (tx) => {
@@ -26,6 +31,7 @@ export class WorkspacesService {
         data: {
           userId,
           workspaceId: workspace.id,
+          role: WorkspaceRole.OWNER,
           status: MembershipStatus.ACTIVE,
         },
       });
@@ -47,6 +53,7 @@ export class WorkspacesService {
 
       return {
         ...workspace,
+        role: WorkspaceRole.OWNER,
         membershipStatus: MembershipStatus.ACTIVE,
         activeWorkspaceId: workspace.id,
       };
@@ -54,30 +61,59 @@ export class WorkspacesService {
   }
 
   async findAllForUser(userId: string) {
-    return this.prisma.workspace.findMany({
+    const memberships = await this.prisma.membership.findMany({
       where: {
-        memberships: {
-          some: {
-            userId,
-            status: MembershipStatus.ACTIVE,
+        userId,
+        status: MembershipStatus.ACTIVE,
+      },
+      select: {
+        id: true,
+        role: true,
+        workspace: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            createdAt: true,
           },
         },
       },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return memberships.map((membership) => ({
+      ...membership.workspace,
+      membershipId: membership.id,
+      role: membership.role,
+    }));
+  }
+
+  async getById(userId: string, workspaceId: string) {
+    const membership = await this.workspaceAccess.getActiveMembership(userId, workspaceId);
+
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
       select: {
         id: true,
         name: true,
         type: true,
         createdAt: true,
       },
-      orderBy: {
-        createdAt: 'asc',
-      },
     });
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    return {
+      ...workspace,
+      membershipId: membership.id,
+      role: membership.role,
+    };
   }
 
   async switchWorkspace(userId: string, sessionId: string, workspaceId: string) {
     return this.prisma.$transaction(async (tx) => {
-      // Confirm that the user has an active membership.
       const membership = await tx.membership.findFirst({
         where: {
           userId,
@@ -86,6 +122,7 @@ export class WorkspacesService {
         },
         select: {
           id: true,
+          role: true,
         },
       });
 
@@ -93,7 +130,6 @@ export class WorkspacesService {
         throw new ForbiddenException('You do not have active access to this workspace');
       }
 
-      // Update only the authenticated user's current session.
       const result = await tx.session.updateMany({
         where: {
           id: sessionId,
@@ -114,6 +150,7 @@ export class WorkspacesService {
       return {
         message: 'Workspace switched successfully',
         activeWorkspaceId: workspaceId,
+        role: membership.role,
       };
     });
   }

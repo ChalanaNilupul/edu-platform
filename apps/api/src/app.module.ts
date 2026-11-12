@@ -1,10 +1,12 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import Joi from 'joi';
 
+import { AuthModule } from './auth/auth.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
-import { AuthModule } from './auth/auth.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
 
 @Module({
@@ -15,13 +17,27 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
         NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
         PORT: Joi.number().port().default(4000),
         CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
+        APP_WEB_URL: Joi.string().uri().default('http://localhost:3000'),
+        MAIL_DRIVER: Joi.string().valid('console', 'disabled').default('console'),
         DATABASE_URL: Joi.string().uri().required(),
       }),
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60_000,
+        limit: 30,
+      },
+    ]),
     PrismaModule,
     HealthModule,
     AuthModule,
     WorkspacesModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

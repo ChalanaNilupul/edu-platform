@@ -14,8 +14,12 @@ describe('Authentication API (e2e)', () => {
   const authServiceMock = {
     register: vi.fn(),
     login: vi.fn(),
-    getCurrentUser: vi.fn(),
+    getCurrentSession: vi.fn(),
     logout: vi.fn(),
+    verifyEmail: vi.fn(),
+    resendEmailVerification: vi.fn(),
+    forgotPassword: vi.fn(),
+    resetPassword: vi.fn(),
   };
 
   beforeEach(async () => {
@@ -136,8 +140,8 @@ describe('Authentication API (e2e)', () => {
   });
 
   describe('GET /api/v1/auth/me', () => {
-    it('should return the authenticated user', async () => {
-      authServiceMock.getCurrentUser.mockResolvedValue({
+    it('should return the authenticated user and active workspace', async () => {
+      authServiceMock.getCurrentSession.mockResolvedValue({
         user: {
           id: 'user-123',
           firstName: 'Chalana',
@@ -145,6 +149,8 @@ describe('Authentication API (e2e)', () => {
           email: 'test@example.com',
           emailVerifiedAt: null,
         },
+        sessionId: 'session-123',
+        activeWorkspaceId: 'workspace-123',
       });
 
       const response = await request(app.getHttpServer())
@@ -153,15 +159,108 @@ describe('Authentication API (e2e)', () => {
         .expect(200);
 
       expect(response.body.user.email).toBe('test@example.com');
-      expect(authServiceMock.getCurrentUser).toHaveBeenCalledWith('valid-session-token');
+      expect(response.body.activeWorkspaceId).toBe('workspace-123');
+      expect(authServiceMock.getCurrentSession).toHaveBeenCalledWith('valid-session-token');
     });
 
     it('should reject requests without a session cookie', async () => {
-      authServiceMock.getCurrentUser.mockRejectedValue(
+      authServiceMock.getCurrentSession.mockRejectedValue(
         new UnauthorizedException('Not authenticated'),
       );
 
       await request(app.getHttpServer()).get('/api/v1/auth/me').expect(401);
+    });
+  });
+
+  describe('POST /api/v1/auth/email/verify', () => {
+    it('should verify an email address with a token', async () => {
+      authServiceMock.verifyEmail.mockResolvedValue({
+        message: 'Email verified successfully',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/email/verify')
+        .send({ token: 'verification-token' })
+        .expect(200);
+
+      expect(response.body.message).toBe('Email verified successfully');
+      expect(authServiceMock.verifyEmail).toHaveBeenCalledWith('verification-token');
+    });
+
+    it('should reject a missing token', async () => {
+      await request(app.getHttpServer()).post('/api/v1/auth/email/verify').send({}).expect(400);
+
+      expect(authServiceMock.verifyEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /api/v1/auth/email/resend', () => {
+    it('should resend verification for the authenticated user', async () => {
+      authServiceMock.getCurrentSession.mockResolvedValue({
+        user: {
+          id: 'user-123',
+          firstName: 'Chalana',
+          lastName: null,
+          email: 'test@example.com',
+          emailVerifiedAt: null,
+        },
+        sessionId: 'session-123',
+        activeWorkspaceId: null,
+      });
+      authServiceMock.resendEmailVerification.mockResolvedValue({
+        message: 'Verification email sent',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/email/resend')
+        .set('Cookie', 'edu_session=valid-session-token')
+        .expect(200);
+
+      expect(response.body.message).toBe('Verification email sent');
+      expect(authServiceMock.resendEmailVerification).toHaveBeenCalledWith('user-123');
+    });
+  });
+
+  describe('POST /api/v1/auth/password/forgot', () => {
+    it('should always return the generic response', async () => {
+      authServiceMock.forgotPassword.mockResolvedValue({
+        message: 'If that email is registered, a password reset link has been sent',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/password/forgot')
+        .send({ email: 'test@example.com' })
+        .expect(200);
+
+      expect(response.body.message).toBe(
+        'If that email is registered, a password reset link has been sent',
+      );
+      expect(authServiceMock.forgotPassword).toHaveBeenCalledWith('test@example.com');
+    });
+  });
+
+  describe('POST /api/v1/auth/password/reset', () => {
+    it('should reset the password with a valid token', async () => {
+      authServiceMock.resetPassword.mockResolvedValue({
+        message: 'Password reset successfully',
+      });
+
+      const response = await request(app.getHttpServer())
+        .post('/api/v1/auth/password/reset')
+        .send({ token: 'reset-token', password: 'NewPassword123!' })
+        .expect(200);
+
+      expect(response.body.message).toBe('Password reset successfully');
+      expect(authServiceMock.resetPassword).toHaveBeenCalledWith('reset-token', 'NewPassword123!');
+    });
+
+    it('should reject a weak password', async () => {
+      await request(app.getHttpServer())
+        .post('/api/v1/auth/password/reset')
+        .send({ token: 'reset-token', password: 'short' })
+        .expect(400);
+
+      expect(authServiceMock.resetPassword).not.toHaveBeenCalled();
     });
   });
 

@@ -1,40 +1,140 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
-import type { Request } from 'express';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+  Post,
+  UseGuards,
+  ValidationPipe,
+} from '@nestjs/common';
+
+import { CurrentSessionId, CurrentUser } from '../common/decorators/current-user.decorator.js';
+import type { AuthenticatedUser } from '../common/types/authenticated-request.js';
+import { WorkspaceRole } from '../generated/prisma/client.js';
 import { SessionAuthGuard } from '../auth/session-auth.guard.js';
-import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
+import { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
+import { InviteMemberDto } from './dto/invite-member.dto.js';
+import { UpdateMemberRoleDto } from './dto/update-member-role.dto.js';
+import { InvitationsService } from './invitations.service.js';
+import { MembershipsService } from './memberships.service.js';
+import { WorkspaceRoles } from './workspace-roles.decorator.js';
+import { WorkspaceRolesGuard } from './workspace-roles.guard.js';
 import { WorkspacesService } from './workspaces.service.js';
 
-type AuthenticatedRequest = Request & {
-  user?: {
-    id: string;
-  };
-  sessionId?: string;
-};
-
 @Controller('workspaces')
-@UseGuards(SessionAuthGuard)
 export class WorkspacesController {
-  constructor(private readonly workspacesService: WorkspacesService) {}
+  constructor(
+    @Inject(WorkspacesService) private readonly workspacesService: WorkspacesService,
+    @Inject(MembershipsService) private readonly membershipsService: MembershipsService,
+    @Inject(InvitationsService) private readonly invitationsService: InvitationsService,
+  ) {}
 
+  @UseGuards(SessionAuthGuard)
   @Post()
-  create(@Req() request: AuthenticatedRequest, @Body() dto: CreateWorkspaceDto) {
-    return this.workspacesService.create(request.user!.id, request.sessionId!, dto);
+  @HttpCode(HttpStatus.CREATED)
+  create(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentSessionId() sessionId: string,
+    @Body(new ValidationPipe({ expectedType: CreateWorkspaceDto })) dto: CreateWorkspaceDto,
+  ) {
+    return this.workspacesService.create(user.id, sessionId, dto);
   }
 
+  @UseGuards(SessionAuthGuard)
   @Get()
-  findAll(@Req() request: AuthenticatedRequest) {
-    return this.workspacesService.findAllForUser(request.user!.id);
+  findAll(@CurrentUser() user: AuthenticatedUser) {
+    return this.workspacesService.findAllForUser(user.id);
   }
 
-  @Post(':workspaceId/switch')
-  switchWorkspace(
-    @Req() request: AuthenticatedRequest,
+  @UseGuards(SessionAuthGuard)
+  @Get(':workspaceId')
+  findOne(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
   ) {
-    return this.workspacesService.switchWorkspace(
-      request.user!.id,
-      request.sessionId!,
-      workspaceId,
-    );
+    return this.workspacesService.getById(user.id, workspaceId);
+  }
+
+  @UseGuards(SessionAuthGuard)
+  @Post(':workspaceId/switch')
+  @HttpCode(HttpStatus.OK)
+  switchWorkspace(
+    @CurrentUser() user: AuthenticatedUser,
+    @CurrentSessionId() sessionId: string,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+  ) {
+    return this.workspacesService.switchWorkspace(user.id, sessionId, workspaceId);
+  }
+
+  @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
+  @WorkspaceRoles(WorkspaceRole.ADMIN)
+  @Get(':workspaceId/members')
+  listMembers(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+  ) {
+    return this.membershipsService.list(user.id, workspaceId);
+  }
+
+  @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
+  @WorkspaceRoles(WorkspaceRole.OWNER)
+  @Patch(':workspaceId/members/:membershipId')
+  updateMemberRole(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('membershipId', ParseUUIDPipe) membershipId: string,
+    @Body(new ValidationPipe({ expectedType: UpdateMemberRoleDto })) dto: UpdateMemberRoleDto,
+  ) {
+    return this.membershipsService.updateRole(user.id, workspaceId, membershipId, dto.role);
+  }
+
+  @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
+  @WorkspaceRoles(WorkspaceRole.ADMIN)
+  @Delete(':workspaceId/members/:membershipId')
+  removeMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('membershipId', ParseUUIDPipe) membershipId: string,
+  ) {
+    return this.membershipsService.remove(user.id, workspaceId, membershipId);
+  }
+
+  @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
+  @WorkspaceRoles(WorkspaceRole.ADMIN)
+  @Get(':workspaceId/invitations')
+  listInvitations(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+  ) {
+    return this.invitationsService.list(user.id, workspaceId);
+  }
+
+  @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
+  @WorkspaceRoles(WorkspaceRole.ADMIN)
+  @Post(':workspaceId/invitations')
+  @HttpCode(HttpStatus.CREATED)
+  inviteMember(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Body(new ValidationPipe({ expectedType: InviteMemberDto })) dto: InviteMemberDto,
+  ) {
+    return this.invitationsService.create(user.id, workspaceId, dto.email, dto.role);
+  }
+
+  @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
+  @WorkspaceRoles(WorkspaceRole.ADMIN)
+  @Delete(':workspaceId/invitations/:invitationId')
+  revokeInvitation(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('invitationId', ParseUUIDPipe) invitationId: string,
+  ) {
+    return this.invitationsService.revoke(user.id, workspaceId, invitationId);
   }
 }

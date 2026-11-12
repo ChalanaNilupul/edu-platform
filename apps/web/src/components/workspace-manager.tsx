@@ -1,13 +1,26 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { Building2, CheckCircle2, GraduationCap, Loader2, Plus, RefreshCw } from 'lucide-react';
+import {
+  Building2,
+  CheckCircle2,
+  GraduationCap,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Users,
+} from 'lucide-react';
+
+type WorkspaceRole = 'OWNER' | 'ADMIN' | 'BRANCH_MANAGER' | 'TEACHER' | 'STUDENT' | 'PARENT';
 
 type Workspace = {
   id: string;
   name: string;
   type: 'TEACHER' | 'INSTITUTE';
   createdAt: string;
+  membershipId: string;
+  role: WorkspaceRole;
 };
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api/v1';
@@ -354,6 +367,16 @@ export function WorkspaceManager({ initialActiveWorkspaceId }: WorkspaceManagerP
                       'Switch to workspace'
                     )}
                   </button>
+
+                  {(workspace.role === 'OWNER' || workspace.role === 'ADMIN') && (
+                    <Link
+                      href={`/workspaces/${workspace.id}/members`}
+                      className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-blue-600 transition hover:bg-blue-50"
+                    >
+                      <Users size={16} />
+                      Manage members
+                    </Link>
+                  )}
                 </div>
               );
             })}
