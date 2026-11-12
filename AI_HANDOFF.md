@@ -1,104 +1,584 @@
-# AI Handoff — Education SaaS Platform
+# EduPlatform — AI Development Handoff
 
-## Project identity
+Last updated: November 12, 2026
 
-- Product: Sri Lanka-first Education SaaS platform combining LMS + IMS.
-- Repository: `https://github.com/ChalanaNilupul/edu-platform.git`
-- Primary market: Sri Lanka.
-- Initial languages: English, Sinhala and Tamil.
-- Initial currency: LKR.
-- Product serves independent teachers and educational institutes, including multi-branch organizations.
+This document is the current development handoff and implementation reference for AI-assisted development.
 
-## Current status
+It records the actual project direction, technical architecture, implementation progress, outstanding work and development priorities.
 
-- **Current phase:** Phase 1 — Repository and development foundation.
-- **Current task:** Phase 1.1 — Establish repository tooling and workspace conventions.
-- Phase 0.4 requirements and user journeys approved and documented.
-- Phase 0.5 architecture decisions 0.5.1–0.5.8 approved; consolidated architecture baseline approved on 2026-11-11.
-- Phase 0.6 implementation readiness reviewed. Development is authorized to proceed.
-- Phase 0.2 customer/competitor desk research is deferred, not completed. Teacher interviews are not a prerequisite. Revisit desk research and prototype validation after an initial working prototype.
-- Current working branch: `feat/phase-1-foundation`. Confirm the actual local branch and Git status before making changes.
-- The branch was published to `origin`; do not assume later commits have been pushed or merged without checking.
+---
 
-## Immediate next task
+# 1. Project Overview
 
-Complete Phase 1.1 before generating application projects:
+EduPlatform is a modular SaaS platform combining:
 
-1. Confirm a supported Node.js LTS version.
-2. Select the package manager and lockfile strategy.
-3. Agree the initial workspace/monorepo layout.
-4. Establish shared TypeScript, linting and formatting conventions.
-5. Update `PROJECT_STRUCTURE.md` to reflect the actual agreed layout.
+- Learning Management System (LMS).
+- Institute Management System (IMS).
 
-Make one technical decision at a time when user approval is needed. Explain the recommendation and trade-offs. Do not silently introduce additional infrastructure or tooling.
+Initial target market: Sri Lanka.
 
-## Approved MVP
+Target customers:
 
-1. Student and teacher management.
-2. Class and batch management.
-3. Attendance and finance.
-4. Learning management.
-5. Examinations.
-6. Student portal.
-7. Basic parent portal.
-8. Announcements and in-app notifications.
-9. Basic reports.
+1. Independent tuition teachers.
+2. Educational institutes.
+3. Multi-branch educational organizations.
 
-Explicit MVP exclusions include live classrooms, AI features, online payment gateway, QR attendance, native mobile apps, advanced accounting/payroll, full white-label implementation, dedicated enterprise deployments and international market/payment/compliance support.
+The platform must support multiple workspaces, with strict data isolation between tenants.
 
-## Approved service models
+The product should be developed as a practical, production-oriented MVP rather than a collection of disconnected demonstrations.
 
-1. Shared SaaS first: centrally managed app, shared PostgreSQL and storage with strict tenant isolation.
-2. White-label SaaS later: same core platform, custom branding/domain, shared infrastructure.
-3. Dedicated enterprise later: separate application deployment, database and storage as required.
+# 2. Repository Information
 
-## Approved architecture decisions
+Repository:
 
-- **Database:** Shared PostgreSQL initially; workspace-owned records have tenant association; server-side membership validation; PostgreSQL RLS as additional protection; future tenant registry and database routing for dedicated customers.
-- **Identity:** One global user identity across workspaces; separate users, workspaces, memberships, roles, permissions and invitations.
-- **Authorization:** Hybrid RBAC plus resource-level and branch-level restrictions; predefined roles and configurable permissions; backend enforcement.
-- **Support access:** Platform admin access to private customer/student data must be temporary, explicitly approved, purpose-limited, scoped, time-limited and audited. No unrestricted default access.
-- **Storage:** Cloudflare R2 initially; provider-independent S3-compatible abstraction; private files; short-lived signed access; quota tracking and metadata in PostgreSQL.
-- **Subscriptions:** Configurable plans, subscriptions and entitlements; manual initial billing; backend enforcement; no deletion of existing data due to limits/expiry.
-- **Application:** Modular monolith; Next.js + TypeScript frontend; Node.js + NestJS + TypeScript backend; PostgreSQL + Prisma; Tailwind; Docker from beginning. Redis/BullMQ deferred until justified; Socket.IO later when required.
-- **Deployment:** Managed cloud hosting, low initial cost, separate frontend/backend services, managed database, one suitable region initially, backups, monitoring, stateless services and future horizontal scaling/dedicated customer infrastructure.
-- **API:** REST + JSON, `/api/v1`, OpenAPI/Swagger, consistent responses/errors, server validation, future scoped external API and webhook support.
+https://github.com/ChalanaNilupul/edu-platform
 
-See `ARCHITECTURE.md` for the full baseline and safeguards.
+Current development branch:
 
-## Open detailed-design questions
+`feat/phase-2-identity`
 
-Do not invent answers. Resolve them before the relevant implementation:
+Current development phase:
 
-- Exact managed cloud provider, region and service plans.
-- Exact managed PostgreSQL provider and backup/PITR/recovery objectives.
-- Cookie-based session versus access/refresh token implementation.
-- Exact API response envelope, pagination, filtering and sorting conventions.
-- CI/CD release approval and rollback process.
-- External API key lifecycle and webhook event catalogue.
-- File scanning and retention implementation.
-- Monitoring provider and alert thresholds.
+**Phase 2 — Identity and Workspace Foundation**
 
-## Collaboration and implementation rules
+Do not assume that Phase 2 has been merged into `main`.
 
-1. Before working on any computer, run `git pull`.
-2. Work on one computer at a time.
-3. Use task branches; do not develop directly on `main`.
-4. Review diffs and run relevant formatting, lint, type-check, test and build commands before merge.
-5. Update docs whenever approved decisions or verified implementation status changes.
-6. Never commit secrets, credentials, student personal data or production exports.
-7. Do not mark implementation complete until implemented, checked and reviewed.
-8. Be transparent about GitHub access; never claim a push/merge without confirmation.
-9. Preserve existing project files and inspect them before replacing or restructuring.
-10. Prefer the simplest solution consistent with the approved architecture; do not add Redis, BullMQ, microservices or cloud infrastructure prematurely.
+The actual local Git state must be checked before proposing commits, pushes or merges.
 
-## Phase 1 sequence
+# 3. Technology Stack
 
-1. Repository tooling and workspace conventions.
-2. Next.js frontend foundation.
-3. NestJS backend foundation.
-4. Docker-based local PostgreSQL and Prisma setup.
-5. Initial API health check, validation and OpenAPI setup.
-6. GitHub Actions checks and documented local development workflow.
+## Frontend
 
-See `ROADMAP.md` for task breakdowns and acceptance criteria.
+- Next.js.
+- React.
+- TypeScript.
+- Tailwind CSS.
+
+## Backend
+
+- Node.js.
+- NestJS.
+- TypeScript.
+- REST JSON API.
+
+## Database
+
+- PostgreSQL.
+- Prisma ORM.
+
+## Infrastructure
+
+- pnpm monorepo.
+- Docker development environment.
+- GitHub Actions CI.
+- Cloudflare R2 planned for file storage.
+
+## API
+
+- API prefix: `/api/v1`.
+- Swagger/OpenAPI foundation.
+- Request validation.
+- Cookie-based authentication.
+
+# 4. Repository Structure
+
+```text
+edu-platform/
+├── apps/
+│   ├── api/
+│   │   ├── prisma/
+│   │   ├── src/
+│   │   │   ├── auth/
+│   │   │   ├── workspaces/
+│   │   │   └── generated/
+│   │   └── test/
+│   └── web/
+│       └── src/
+│           ├── app/
+│           └── components/
+├── infra/
+│   └── docker/
+├── .github/
+│   └── workflows/
+├── ROADMAP.md
+├── README.md
+├── AI_HANDOFF.md
+└── package.json
+```
+
+# 5. Completed Technical Foundation
+
+The following foundation has been implemented:
+
+- pnpm monorepo.
+- Next.js frontend.
+- NestJS backend.
+- TypeScript.
+- PostgreSQL.
+- Prisma ORM.
+- Docker development database.
+- API health endpoint.
+- Swagger/OpenAPI foundation.
+- Environment configuration.
+- ESLint and Prettier.
+- Automated test infrastructure.
+- GitHub Actions CI workflow.
+
+Phase 1 is considered complete.
+
+# 6. Database and Identity Implementation
+
+Current identity-related models include:
+
+## User
+
+Represents a global user identity.
+
+Users can belong to multiple workspaces.
+
+## Workspace
+
+Represents an independent teacher workspace or institute workspace.
+
+Workspace types:
+
+- `TEACHER`
+- `INSTITUTE`
+
+## Membership
+
+Connects users with workspaces.
+
+Membership statuses currently include:
+
+- `ACTIVE`
+- `SUSPENDED`
+
+A membership is required for workspace access.
+
+## Session
+
+Stores database-backed authentication sessions.
+
+Session tokens are hashed before storage.
+
+The session model also contains a nullable `activeWorkspaceId` field.
+
+The active workspace must be validated against the authenticated user's membership.
+
+# 7. Authentication Implementation
+
+Implemented backend functionality:
+
+- User registration.
+- Email normalization.
+- Argon2id password hashing.
+- User login.
+- Password verification.
+- Database-backed sessions.
+- Cryptographically random session tokens.
+- SHA-256 token hashing.
+- Seven-day session expiry.
+- Logout.
+- Session invalidation.
+- Current-user/session retrieval.
+
+Implemented frontend functionality:
+
+- Registration page.
+- Login page.
+- Protected dashboard.
+- HTTP-only `edu_session` cookie usage.
+- Logout interface.
+
+Authentication cookie configuration includes:
+
+- HTTP-only.
+- Secure in production.
+- SameSite Lax.
+- Path `/`.
+- Expiration based on session expiry.
+
+The backend uses a session authentication guard for protected routes.
+
+# 8. Workspace Implementation
+
+## Backend
+
+Implemented:
+
+- Teacher workspace creation.
+- Institute workspace creation.
+- Initial active membership creation.
+- Workspace listing for authenticated users.
+- Active workspace switching.
+- Session active workspace persistence.
+- Membership validation during workspace switching.
+- Database transactions for workspace creation and switching.
+
+Workspace creation associates the new workspace with the authenticated user.
+
+The creation operation also updates the active workspace on the current session.
+
+## Frontend
+
+Implemented:
+
+- Workspace manager component.
+- Workspace listing.
+- Workspace creation form.
+- Workspace creation modal.
+- Workspace switching interface.
+- Loading and error states.
+
+Remaining:
+
+- Dedicated `/workspaces` page.
+- Sidebar navigation.
+- Active workspace restoration after refresh.
+- Complete browser verification.
+- Better workspace overview and settings.
+
+# 9. Current Frontend State
+
+Current application routes include:
+
+```text
+/
+├── /login
+└── /register
+```
+
+The dashboard currently contains:
+
+- Sidebar navigation.
+- Welcome section.
+- Summary statistic cards.
+- Workspace overview.
+- Upcoming classes section.
+- Workspace management interface.
+
+Important:
+
+Several dashboard statistics and upcoming classes are demonstration data.
+
+They must not be represented as real student, attendance, finance or timetable records.
+
+The final dashboard must retrieve workspace-scoped information from the relevant backend modules.
+
+The workspace management interface is not yet fully integrated into a dedicated route and shared navigation structure.
+
+# 10. Testing Status
+
+Previously reported test results include:
+
+## Workspace E2E HTTP Tests
+
+9 tests passed.
+
+## Authentication E2E HTTP Tests
+
+7 tests passed.
+
+## Application E2E HTTP Tests
+
+1 test passed.
+
+## Combined E2E Result
+
+17 tests passed across 3 test files.
+
+Authentication service unit tests and controller HTTP tests have also been implemented.
+
+Additional reported checks:
+
+- API typecheck passed.
+- API lint passed.
+- Frontend and backend lint passed after import, JSX and React effect fixes.
+- Three non-blocking Next.js navigation warnings were reported.
+- Prettier formatting was being corrected.
+
+Important testing distinctions:
+
+1. Unit tests validate isolated business logic.
+2. Mock-based HTTP tests validate controller behavior.
+3. Database integration tests validate real database interactions.
+4. Manual browser tests validate real frontend workflows.
+5. Security testing validates authorization and isolation.
+
+Passing mocked tests does not prove full database integration or tenant security.
+
+Do not claim unverified checks are complete.
+
+# 11. Remaining Phase 2 Work
+
+## Authentication Security
+
+- Verify rate limiting at runtime.
+- Verify Origin checking at runtime.
+- Implement stronger CSRF protection.
+- Implement email verification.
+- Implement password reset.
+- Complete authentication security review.
+
+## Workspace Management
+
+- Create dedicated `/workspaces` route.
+- Add workspace navigation to the sidebar.
+- Restore active workspace after refresh.
+- Verify creation and switching manually.
+- Implement workspace invitations.
+- Implement invitation acceptance.
+- Implement invitation expiration.
+- Implement membership management.
+
+## Tenant Isolation
+
+- Implement tenant context resolution.
+- Enforce active workspace membership.
+- Ensure backend queries are workspace-scoped.
+- Ensure every workspace-owned record has a tenant identifier.
+- Implement PostgreSQL RLS.
+- Set tenant context transaction-safely.
+- Verify pooled connection safety.
+- Implement cross-tenant access tests.
+- Complete tenant security review.
+
+# 12. Approved Architecture Decisions
+
+These are approved design constraints and should not be changed casually.
+
+## Multi-Tenancy
+
+Initial model:
+
+- Shared PostgreSQL database.
+- Shared application infrastructure.
+- Tenant-scoped workspace records.
+- Server-side membership validation.
+- PostgreSQL RLS as an additional security layer.
+
+Future model:
+
+- Hybrid database registry.
+- Dedicated database option for enterprise tenants.
+- Migration path from shared to dedicated infrastructure.
+
+## Identity
+
+- One global user identity.
+- Multiple workspace memberships.
+- Separate User, Workspace, Membership, Session, Role and Permission concepts.
+- Workspace membership determines access.
+
+## Authorization
+
+- Hybrid RBAC.
+- Resource restrictions.
+- Branch-level restrictions.
+- Predefined roles.
+- Custom roles where appropriate.
+- Backend authorization is mandatory.
+
+Tenant isolation must never be bypassed by platform roles.
+
+## Storage
+
+Planned Cloudflare R2 integration.
+
+Requirements:
+
+- Private by default.
+- Backend-authorized uploads.
+- Short-lived signed URLs.
+- File metadata stored in PostgreSQL.
+- Storage quotas.
+- Provider-independent S3 abstraction.
+
+## Billing
+
+- Entitlement-based subscriptions.
+- Manual billing initially.
+- Backend enforcement.
+- Downgrades must not delete customer data.
+
+## Backend Architecture
+
+- Modular monolith.
+- Modules own business logic.
+- Clear module interfaces.
+- REST JSON API under `/api/v1`.
+
+## Infrastructure
+
+- Docker development environment.
+- Separate frontend and API deployments.
+- Managed PostgreSQL.
+- Managed file storage.
+- Staging and production environments.
+- GitHub Actions CI/CD.
+- Backups and point-in-time recovery.
+- Health checks.
+- Logging and monitoring.
+- Connection pooling.
+- Rate limiting.
+
+Avoid premature multi-region infrastructure.
+
+# 13. Platform Administrator Security
+
+Platform administrators must not have unrestricted access to private tenant or student records.
+
+Exceptional access must be:
+
+- Explicitly approved.
+- Purpose-limited.
+- Resource-scoped.
+- Time-limited.
+- Fully audited.
+- Automatically revoked.
+
+This requirement is a core security constraint.
+
+# 14. Product MVP Development Order
+
+After Phase 2, development should follow this sequence.
+
+## Phase 3 — Student Management
+
+- Student profiles.
+- Parent and guardian information.
+- Student enrollment.
+- Student directory.
+- Search and filtering.
+- Pagination.
+- Student editing.
+- CSV import with validation.
+
+## Phase 4 — Teacher Management
+
+- Teacher profiles.
+- Teacher invitations.
+- Teacher assignments.
+- Teacher availability.
+
+## Phase 5 — Classes and Batches
+
+- Class creation.
+- Batch management.
+- Subjects.
+- Teacher assignments.
+- Student enrollment.
+- Timetables.
+
+## Phase 6 — Attendance
+
+- Manual attendance.
+- Attendance history.
+- Attendance summaries.
+- Reports.
+
+## Phase 7 — Finance
+
+- Fee structures.
+- Monthly fees.
+- Cash and bank payments.
+- Outstanding balances.
+- Receipts.
+- Payment history.
+- Finance reports.
+
+## Phase 8 — Learning
+
+- Lessons.
+- PDF and video resources.
+- Assignments.
+- Student submissions.
+- Teacher feedback.
+
+## Phase 9 — Examinations
+
+- Question bank.
+- MCQ.
+- True/false.
+- Timed examinations.
+- Automatic marking.
+- Results.
+- Rankings.
+
+## Phase 10 — Portals
+
+- Student portal.
+- Parent/guardian portal.
+- Learning progress.
+- Attendance visibility.
+- Fee visibility.
+
+## Phase 11 — Communication and Reporting
+
+- Announcements.
+- In-app notifications.
+- Basic operational reports.
+
+# 15. Features Outside the Initial MVP
+
+Do not prioritize these before the core product is working:
+
+- Live classrooms.
+- Live quizzes.
+- Whiteboards.
+- Real-time collaboration.
+- AI-powered features.
+- Payment gateways.
+- QR attendance.
+- Advanced accounting.
+- Payroll and tax.
+- Native Flutter applications.
+- Full white-label custom domains.
+- Dedicated enterprise deployments.
+
+# 16. Immediate Development Priorities
+
+Follow this order:
+
+1. Finish workspace management.
+2. Implement dedicated workspace page.
+3. Add workspace sidebar navigation.
+4. Restore active workspace after refresh.
+5. Implement invitations and membership management.
+6. Complete authentication security work.
+7. Implement tenant authorization.
+8. Implement PostgreSQL RLS.
+9. Verify tenant isolation.
+10. Start Student Management.
+
+Do not jump into student, attendance or finance modules before the workspace authorization foundation is ready.
+
+# 17. Development Rules for AI Assistance
+
+The developer prefers:
+
+- Direct and practical implementation.
+- One task at a time.
+- Clear explanations of unfamiliar commands.
+- Exact file paths and code changes.
+- Small, focused modifications.
+- No unnecessary full-file dumps.
+- No repeated testing without a concrete reason.
+- No claiming changes were made unless verified.
+- No claiming GitHub pushes or merges without confirmation.
+- No unnecessary architecture rewrites.
+- Prioritize functional MVP features over endless testing.
+
+When a task is completed:
+
+1. Explain what was implemented.
+2. State exactly what was tested.
+3. Distinguish mocked tests from real integration tests.
+4. Update ROADMAP.md.
+5. Update this handoff if architecture or implementation status changed.
+6. Identify the next practical development task.
+
+If the user explicitly asks to commit and push, provide exact Git commands without adding unnecessary review gates.
+
+**The goal is to build a working education-management product, not merely a technically impressive foundation.**

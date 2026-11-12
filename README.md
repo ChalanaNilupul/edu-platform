@@ -1,61 +1,294 @@
-# Education SaaS Platform (LMS + IMS)
+# EduPlatform
 
-A Sri Lanka-first, multi-tenant education SaaS platform for independent teachers and educational institutes.
+**A unified Learning Management System (LMS) and Institute Management System (IMS).**
 
-## Project status
+EduPlatform is a modular, multi-tenant SaaS platform designed for independent tuition teachers and educational institutes.
 
-- **Current phase:** Phase 1 — Repository and development foundation
-- **Current task:** Phase 1.1 — Establish repository tooling and workspace conventions.
-- **Completed:** MVP scope and requirements (Phase 0.4), architecture baseline (Phase 0.5, decisions 0.5.1–0.5.8), and implementation readiness (Phase 0.6).
-- **Deferred:** Phase 0.2 customer/competitor desk research. Teacher interviews are not a prerequisite for development. Desk research and prototype-based validation will be revisited after an initial working prototype.
-- **Implementation:** Foundation work is beginning on `feat/phase-1-foundation`; it is not yet complete.
+The initial focus is the Sri Lankan education market, with support for multiple workspaces, institute management, student administration, teaching workflows and educational operations.
 
-## Product direction
+## Project Status
 
-One modular LMS + IMS platform serving independent teachers and institutes, with shared SaaS first, white-label SaaS and dedicated enterprise infrastructure planned for later. The initial market is Sri Lanka, with English, Sinhala and Tamil language support planned and LKR as the initial currency.
+**Current Development Phase: Phase 2 — Identity and Workspace Foundation**
 
-## Approved architecture baseline
+EduPlatform is under active development. The technical foundation and core authentication functionality have been implemented. Workspace management is currently being developed.
 
-- Frontend: Next.js + TypeScript.
-- Backend: Node.js + NestJS + TypeScript modular monolith.
-- API: versioned REST/JSON under `/api/v1`, documented with OpenAPI.
-- Database: PostgreSQL with Prisma.
-- File storage: Cloudflare R2 behind a provider-independent storage interface.
-- Containers: Docker from the beginning.
-- Hosting: managed services initially, keeping costs low and allowing future scaling and dedicated customer infrastructure.
-- Deferred infrastructure: Redis/BullMQ and Socket.IO until justified by a concrete requirement.
+The full LMS and IMS business modules are planned for subsequent development phases.
 
-See `ARCHITECTURE.md` for the approved decisions, safeguards and detailed-design questions.
+## Implemented Features
 
-## Documentation
+### Technical Foundation
 
-- `REQUIREMENTS.md` — approved product requirements and MVP scope.
-- `ARCHITECTURE.md` — approved Phase 0.5 architecture baseline.
-- `ROADMAP.md` — phases, tasks, status and acceptance criteria.
-- `AI_HANDOFF.md` — project context and collaboration instructions.
-- `PROJECT_STRUCTURE.md` — repository structure reference; preserve it and update it when the actual implementation structure is established.
+- Monorepo architecture using pnpm.
+- Next.js frontend.
+- NestJS backend.
+- TypeScript.
+- PostgreSQL database.
+- Prisma ORM.
+- Docker development environment.
+- REST API with `/api/v1` prefix.
+- Swagger/OpenAPI foundation.
+- GitHub Actions CI workflow.
+- ESLint and Prettier.
+- Automated testing infrastructure.
 
-## Working agreement
+### Authentication
 
-1. Before working on a computer, run `git pull`.
-2. Work on one computer at a time.
-3. Use task branches; do not develop directly on `main`.
-4. Keep changes focused and review the diff before committing.
-5. Run relevant formatting, linting, type checks and tests before merging.
-6. Update documentation when decisions or verified implementation status changes.
-7. Mark planning tasks complete only after their acceptance criteria are reviewed. Mark implementation tasks complete only after implementation, checks and review.
-8. Never commit secrets, credentials, student personal data or production exports.
-9. Do not claim a change is pushed or merged unless Git confirms it.
+- User registration.
+- User login.
+- Argon2id password hashing.
+- Database-backed sessions.
+- SHA-256 hashed session tokens.
+- HTTP-only authentication cookies.
+- Current-user endpoint.
+- Logout and session invalidation.
+- Protected dashboard.
 
-## Current development sequence
+### Workspace Management
 
-1. Repository tooling and workspace conventions.
-2. Next.js frontend foundation.
-3. NestJS backend foundation.
-4. Docker-based local PostgreSQL and Prisma setup.
-5. Initial API health check, validation and OpenAPI setup.
-6. GitHub Actions checks and documented local development workflow.
+Backend functionality:
 
-## Next step
+- Teacher workspace creation.
+- Institute workspace creation.
+- Initial workspace membership creation.
+- Workspace listing.
+- Active workspace switching.
+- Session-based active workspace storage.
+- Membership verification during workspace switching.
 
-Complete Phase 1.1: agree and document the Node.js version, package manager, workspace layout and shared TypeScript conventions before generating application projects.
+Frontend functionality:
+
+- Login and registration pages.
+- Dashboard interface.
+- Workspace manager component.
+- Workspace listing.
+- Workspace creation modal.
+- Workspace switching interface.
+
+## Partially Implemented
+
+- Dedicated workspace management page.
+- Active workspace restoration in the frontend.
+- Complete workspace navigation.
+- Authentication security hardening.
+- Workspace invitations.
+- Tenant isolation.
+
+## Planned Features
+
+### Student Management
+
+- Student profiles.
+- Parent and guardian records.
+- Student enrollment.
+- Student directory.
+- CSV import.
+
+### Teacher Management
+
+- Teacher profiles.
+- Teacher assignments.
+- Teacher availability.
+- Teacher membership management.
+
+### Classes and Batches
+
+- Class management.
+- Subject management.
+- Teacher assignments.
+- Student enrollment.
+- Timetables.
+
+### Attendance
+
+- Manual attendance.
+- Attendance history.
+- Attendance summaries.
+- Attendance reports.
+
+### Finance
+
+- Fee structures.
+- Monthly fee records.
+- Cash and bank payments.
+- Outstanding balances.
+- Receipts.
+- Finance reports.
+
+### Learning Management
+
+- Lessons.
+- PDF and video resources.
+- Assignments.
+- Student submissions.
+- Teacher feedback.
+
+### Examinations
+
+- Question bank.
+- MCQ and true/false questions.
+- Timed examinations.
+- Automatic marking.
+- Results and rankings.
+
+### Portals and Communication
+
+- Student portal.
+- Parent/guardian portal.
+- Announcements.
+- In-app notifications.
+- Basic reports.
+
+## Product Direction
+
+EduPlatform is designed to support three service models.
+
+### 1. Shared Multi-Tenant SaaS
+
+- Multiple independent teachers and institutes.
+- Shared application infrastructure.
+- Centralized infrastructure and storage.
+- Strict workspace data isolation.
+- Self-service workspace creation.
+
+### 2. White-Label SaaS
+
+- Same core platform.
+- Custom branding.
+- Custom domains.
+- Shared infrastructure.
+
+### 3. Dedicated Enterprise Deployment
+
+- Separate application deployment.
+- Dedicated database and storage.
+- Custom branding and domain.
+- Enterprise support.
+
+The initial implementation prioritizes shared multi-tenant SaaS.
+
+## Technology Stack
+
+| Layer                   | Technology              |
+| ----------------------- | ----------------------- |
+| Frontend                | Next.js                 |
+| UI                      | React and Tailwind CSS  |
+| Language                | TypeScript              |
+| Backend                 | Node.js and NestJS      |
+| Database                | PostgreSQL              |
+| ORM                     | Prisma                  |
+| API                     | REST JSON               |
+| Package Manager         | pnpm                    |
+| Development Environment | Docker                  |
+| File Storage            | Cloudflare R2 (planned) |
+
+## Repository Structure
+
+```text
+edu-platform/
+├── apps/
+│   ├── api/          # NestJS backend
+│   └── web/          # Next.js frontend
+├── infra/
+│   └── docker/       # Docker infrastructure
+├── .github/
+│   └── workflows/    # GitHub Actions
+├── ROADMAP.md
+├── README.md
+├── AI_HANDOFF.md
+└── package.json
+```
+
+## Development Setup
+
+### Requirements
+
+- Node.js
+- pnpm
+- Docker Desktop
+- Git
+
+### Install Dependencies
+
+```powershell
+pnpm install
+```
+
+### Configure Environment
+
+Create the required environment files using the project's existing environment configuration and examples.
+
+Do not commit secrets or production credentials.
+
+### Start Development Database
+
+Use the Docker Compose configuration under:
+
+```text
+infra/docker/
+```
+
+Start the configured services using the appropriate Docker Compose command for that directory.
+
+### Run Development Servers
+
+API:
+
+```powershell
+pnpm --filter @edu-platform/api dev
+```
+
+Frontend:
+
+```powershell
+pnpm --filter @edu-platform/web dev
+```
+
+Check the package scripts in the relevant `package.json` files for the exact available commands.
+
+## Quality Checks
+
+From the repository root:
+
+```powershell
+pnpm lint
+pnpm typecheck
+pnpm test
+pnpm build
+pnpm format:check
+```
+
+These commands serve different purposes:
+
+- Lint: coding rules and potential issues.
+- Typecheck: TypeScript validation.
+- Test: automated test execution.
+- Build: production compilation.
+- Format check: Prettier formatting validation.
+
+A passing automated check does not automatically mean a feature has been manually verified in the browser or secured for production.
+
+## Development Roadmap
+
+See [ROADMAP.md](./ROADMAP.md) for the complete development plan and implementation status.
+
+## Current Development Priorities
+
+1. Finish workspace management.
+2. Complete authentication security.
+3. Implement invitations and membership management.
+4. Implement tenant authorization and isolation.
+5. Build Student Management.
+6. Continue with the remaining LMS and IMS modules.
+
+## Security Principles
+
+- Every workspace-owned record must be tenant-scoped.
+- Backend authorization is mandatory.
+- Workspace membership determines access.
+- PostgreSQL Row-Level Security will provide an additional isolation layer.
+- Private files must be accessed through backend-authorized short-lived signed URLs.
+- Platform administrator access to private tenant records must be explicitly approved, purpose-limited, time-limited and audited.
+
+## License
+
+License and distribution terms are to be defined.
