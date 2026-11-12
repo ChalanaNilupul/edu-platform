@@ -48,7 +48,43 @@ export function WorkspaceManager() {
   }
 
   useEffect(() => {
-    void loadWorkspaces();
+    let cancelled = false;
+
+    async function initializeWorkspaces() {
+      setLoading(true);
+      setError('');
+
+      try {
+        const response = await fetch(`${API_URL}/workspaces`, {
+          credentials: 'include',
+          cache: 'no-store',
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || 'Unable to load workspaces.');
+        }
+
+        if (!cancelled) {
+          setWorkspaces(data);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Unable to load workspaces.');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    }
+
+    void initializeWorkspaces();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   async function handleCreate(event: React.FormEvent<HTMLFormElement>) {

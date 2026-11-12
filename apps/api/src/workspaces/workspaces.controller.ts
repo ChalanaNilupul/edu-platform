@@ -1,8 +1,8 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { SessionAuthGuard } from '../auth/session-auth.guard.js';
-import { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
-import { WorkspacesService } from './workspaces.service.js';
+import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
+import type { WorkspacesService } from './workspaces.service.js';
 
 type AuthenticatedRequest = Request & {
   user?: {

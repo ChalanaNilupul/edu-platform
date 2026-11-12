@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import { MembershipStatus } from '../generated/prisma/client.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import type { PrismaService } from '../prisma/prisma.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
 
 @Injectable()
