@@ -204,6 +204,19 @@ Implemented and covered by automated tests:
 
 Verified: 83 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and a successful `next build`.
 
+### Audit logging notes (November 12, 2026)
+
+Implemented finding M4 as a database-backed security trail:
+
+- New append-only `audit_events` table (migration `20261112182057_add_audit_events`) with an `AuditEventType` enum, a JSONB `metadata` column and indexes on workspace, actor and event type by time.
+- Deliberately no foreign keys or relations, so entries survive user and workspace deletion; actor, workspace and target IDs are nullable context.
+- `AuditService.record()` is a global provider that writes the event and swallows/logs failures, so auditing can never break the action it describes.
+- Events recorded after the primary transaction succeeds: registration, login success/failure, email verification and resend, password reset request/completion, workspace creation/switching, member role change/removal, and invitation creation/revocation/acceptance.
+- Unit tests assert each wiring point; integration tests assert persisted rows (including failed-login actor, workspace creation, invitation acceptance, role change and member removal).
+- Runtime role needs the new table: run `pnpm db:setup-app-role` after `pnpm exec prisma migrate deploy`.
+
+Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and builds.
+
 # Phase 3 — Student Management
 
 **Status: Not Started**

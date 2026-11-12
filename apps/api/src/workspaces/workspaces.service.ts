@@ -1,6 +1,7 @@
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 
-import { MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditEventType, MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TenantContextService } from '../prisma/tenant-context.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
@@ -12,10 +13,11 @@ export class WorkspacesService {
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(TenantContextService) private readonly tenant: TenantContextService,
     @Inject(WorkspaceAccessService) private readonly workspaceAccess: WorkspaceAccessService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async create(userId: string, sessionId: string, dto: CreateWorkspaceDto) {
-    return this.prisma.$transaction(async (tx) => {
+    const created = await this.prisma.$transaction(async (tx) => {
       const workspace = await tx.workspace.create({
         data: {
           name: dto.name,
@@ -62,6 +64,14 @@ export class WorkspacesService {
         activeWorkspaceId: workspace.id,
       };
     });
+
+    await this.audit.record({
+      type: AuditEventType.WORKSPACE_CREATED,
+      actorUserId: userId,
+      workspaceId: created.id,
+    });
+
+    return created;
   }
 
   async findAllForUser(userId: string) {
@@ -121,7 +131,7 @@ export class WorkspacesService {
   }
 
   async switchWorkspace(userId: string, sessionId: string, workspaceId: string) {
-    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+    const result = await this.tenant.runAsTenant(workspaceId, async (tx) => {
       const membership = await tx.membership.findFirst({
         where: {
           userId,
@@ -138,7 +148,7 @@ export class WorkspacesService {
         throw new ForbiddenException('You do not have active access to this workspace');
       }
 
-      const result = await tx.session.updateMany({
+      const session = await tx.session.updateMany({
         where: {
           id: sessionId,
           userId,
@@ -151,7 +161,7 @@ export class WorkspacesService {
         },
       });
 
-      if (result.count !== 1) {
+      if (session.count !== 1) {
         throw new ForbiddenException('Session is no longer valid');
       }
 
@@ -161,5 +171,13 @@ export class WorkspacesService {
         role: membership.role,
       };
     });
+
+    await this.audit.record({
+      type: AuditEventType.WORKSPACE_SWITCHED,
+      actorUserId: userId,
+      workspaceId,
+    });
+
+    return result;
   }
 }

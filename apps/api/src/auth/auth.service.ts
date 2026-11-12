@@ -8,7 +8,8 @@ import {
 } from '@nestjs/common';
 import * as argon2 from 'argon2';
 
-import { Prisma } from '../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditEventType, Prisma } from '../generated/prisma/client.js';
 import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type { LoginDto } from './dto/login.dto.js';
@@ -27,6 +28,7 @@ export class AuthService {
   constructor(
     @Inject(PrismaService) private readonly prisma: PrismaService,
     @Inject(MailService) private readonly mail: MailService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -61,6 +63,11 @@ export class AuthService {
         );
       }
 
+      await this.audit.record({
+        type: AuditEventType.USER_REGISTERED,
+        actorUserId: user.id,
+      });
+
       return {
         message: 'Account created successfully',
         emailVerificationRequired: true,
@@ -85,12 +92,23 @@ export class AuthService {
     if (!user) {
       // Keep the work comparable to a real verification to reduce timing leaks.
       await argon2.verify(await this.getDummyPasswordHash(), dto.password);
+
+      await this.audit.record({
+        type: AuditEventType.LOGIN_FAILED,
+        metadata: { email },
+      });
+
       throw new UnauthorizedException('Invalid email or password');
     }
 
     const isPasswordValid = await argon2.verify(user.passwordHash, dto.password);
 
     if (!isPasswordValid) {
+      await this.audit.record({
+        type: AuditEventType.LOGIN_FAILED,
+        actorUserId: user.id,
+      });
+
       throw new UnauthorizedException('Invalid email or password');
     }
 
@@ -110,6 +128,11 @@ export class AuthService {
         tokenHash,
         expiresAt,
       },
+    });
+
+    await this.audit.record({
+      type: AuditEventType.LOGIN_SUCCEEDED,
+      actorUserId: user.id,
     });
 
     return {
@@ -193,6 +216,11 @@ export class AuthService {
       }),
     ]);
 
+    await this.audit.record({
+      type: AuditEventType.EMAIL_VERIFIED,
+      actorUserId: record.userId,
+    });
+
     return { message: 'Email verified successfully' };
   }
 
@@ -211,6 +239,11 @@ export class AuthService {
     }
 
     await this.issueEmailVerification(user.id, user.email);
+
+    await this.audit.record({
+      type: AuditEventType.EMAIL_VERIFICATION_RESENT,
+      actorUserId: user.id,
+    });
 
     return { message: 'Verification email sent' };
   }
@@ -246,6 +279,11 @@ export class AuthService {
           error instanceof Error ? error.stack : undefined,
         );
       }
+
+      await this.audit.record({
+        type: AuditEventType.PASSWORD_RESET_REQUESTED,
+        actorUserId: user.id,
+      });
     }
 
     return {
@@ -279,6 +317,11 @@ export class AuthService {
         where: { userId: record.userId },
       }),
     ]);
+
+    await this.audit.record({
+      type: AuditEventType.PASSWORD_RESET_COMPLETED,
+      actorUserId: record.userId,
+    });
 
     return { message: 'Password reset successfully' };
   }

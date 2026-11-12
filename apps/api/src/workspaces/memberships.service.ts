@@ -6,7 +6,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 
-import { WorkspaceRole } from '../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditEventType, WorkspaceRole } from '../generated/prisma/client.js';
 import { TenantContextService } from '../prisma/tenant-context.service.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
 
@@ -15,6 +16,7 @@ export class MembershipsService {
   constructor(
     @Inject(TenantContextService) private readonly tenant: TenantContextService,
     @Inject(WorkspaceAccessService) private readonly workspaceAccess: WorkspaceAccessService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async list(actorId: string, workspaceId: string) {
@@ -48,7 +50,7 @@ export class MembershipsService {
     membershipId: string,
     role: WorkspaceRole,
   ) {
-    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+    const result = await this.tenant.runAsTenant(workspaceId, async (tx) => {
       await this.workspaceAccess.requireRoles(actorId, workspaceId, [WorkspaceRole.OWNER], tx);
 
       const target = await tx.membership.findFirst({
@@ -75,7 +77,7 @@ export class MembershipsService {
         throw new BadRequestException('You cannot change your own role');
       }
 
-      return tx.membership.update({
+      const updated = await tx.membership.update({
         where: { id: target.id },
         data: { role },
         select: {
@@ -84,11 +86,23 @@ export class MembershipsService {
           status: true,
         },
       });
+
+      return { updated, previousRole: target.role };
     });
+
+    await this.audit.record({
+      type: AuditEventType.MEMBER_ROLE_CHANGED,
+      actorUserId: actorId,
+      workspaceId,
+      targetId: membershipId,
+      metadata: { from: result.previousRole, to: role },
+    });
+
+    return result.updated;
   }
 
   async remove(actorId: string, workspaceId: string, membershipId: string) {
-    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+    const removedRole = await this.tenant.runAsTenant(workspaceId, async (tx) => {
       const actor = await this.workspaceAccess.requireRoles(
         actorId,
         workspaceId,
@@ -136,7 +150,17 @@ export class MembershipsService {
         data: { activeWorkspaceId: null },
       });
 
-      return { message: 'Member removed' };
+      return target.role;
     });
+
+    await this.audit.record({
+      type: AuditEventType.MEMBER_REMOVED,
+      actorUserId: actorId,
+      workspaceId,
+      targetId: membershipId,
+      metadata: { role: removedRole },
+    });
+
+    return { message: 'Member removed' };
   }
 }

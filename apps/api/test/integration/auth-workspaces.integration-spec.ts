@@ -78,6 +78,16 @@ describe('EduPlatform database integration', () => {
 
       expect(login.status).toBe(401);
       expect(login.body.message).toBe('Invalid email or password');
+
+      const stored = await context.prisma.user.findUniqueOrThrow({
+        where: { email: 'owner@example.com' },
+      });
+      const failed = await context.prisma.auditEvent.findFirstOrThrow({
+        where: { type: 'LOGIN_FAILED' },
+      });
+
+      expect(failed.actorUserId).toBe(stored.id);
+      expect(failed.metadata).toBeNull();
     });
 
     it('invalidates the stored session on logout', async () => {
@@ -178,6 +188,12 @@ describe('EduPlatform database integration', () => {
       const me = await client.get('/api/v1/auth/me');
 
       expect(me.body.activeWorkspaceId).toBe(workspace.id);
+
+      const created = await context.prisma.auditEvent.findFirstOrThrow({
+        where: { type: 'WORKSPACE_CREATED', workspaceId: workspace.id },
+      });
+
+      expect(created.actorUserId).toBe(user.id);
     });
 
     it('switches between workspaces and restores the active workspace from the session', async () => {
@@ -256,6 +272,14 @@ describe('EduPlatform database integration', () => {
       });
 
       expect(stored?.status).toBe('ACCEPTED');
+
+      const auditEntry = await context.prisma.auditEvent.findFirstOrThrow({
+        where: { type: 'INVITATION_ACCEPTED', workspaceId: workspace.id },
+      });
+
+      expect(auditEntry.actorUserId).toBe(member.user.id);
+      expect(auditEntry.targetId).toBe(invitation.body.id);
+      expect(auditEntry.metadata).toEqual({ role: 'TEACHER' });
     });
 
     it('rejects acceptance from a different email address', async () => {
@@ -376,6 +400,12 @@ describe('EduPlatform database integration', () => {
       expect(promoted.status).toBe(200);
       expect(promoted.body.role).toBe('ADMIN');
 
+      const roleChange = await context.prisma.auditEvent.findFirstOrThrow({
+        where: { type: 'MEMBER_ROLE_CHANGED', targetId: membership.id },
+      });
+
+      expect(roleChange.metadata).toEqual({ from: 'TEACHER', to: 'ADMIN' });
+
       expect((await member.client.get('/api/v1/auth/me')).body.activeWorkspaceId).toBe(
         workspace.id,
       );
@@ -386,6 +416,13 @@ describe('EduPlatform database integration', () => {
       );
 
       expect(removed.status).toBe(200);
+
+      const removal = await context.prisma.auditEvent.findFirstOrThrow({
+        where: { type: 'MEMBER_REMOVED', targetId: membership.id },
+      });
+
+      expect(removal.metadata).toEqual({ role: 'ADMIN' });
+      expect(removal.workspaceId).toBe(workspace.id);
       expect(
         await context.prisma.membership.findUnique({
           where: { id: membership.id },

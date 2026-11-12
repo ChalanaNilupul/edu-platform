@@ -33,6 +33,23 @@ enum InvitationStatus {
   EXPIRED
 }
 
+enum AuditEventType {
+  USER_REGISTERED
+  LOGIN_SUCCEEDED
+  LOGIN_FAILED
+  EMAIL_VERIFIED
+  EMAIL_VERIFICATION_RESENT
+  PASSWORD_RESET_REQUESTED
+  PASSWORD_RESET_COMPLETED
+  WORKSPACE_CREATED
+  WORKSPACE_SWITCHED
+  MEMBER_ROLE_CHANGED
+  MEMBER_REMOVED
+  INVITATION_CREATED
+  INVITATION_REVOKED
+  INVITATION_ACCEPTED
+}
+
 model User {
   id              String    @id @default(uuid())
   email           String    @unique
@@ -120,6 +137,23 @@ model EmailVerificationToken {
 
   @@index([userId])
   @@map("email_verification_tokens")
+}
+
+/// Append-only security trail. Deliberately no relations so entries survive
+/// user and workspace deletion.
+model AuditEvent {
+  id          String         @id @default(uuid())
+  type        AuditEventType
+  actorUserId String?        @map("actor_user_id")
+  workspaceId String?        @map("workspace_id")
+  targetId    String?        @map("target_id")
+  metadata    Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([type, createdAt])
+  @@map("audit_events")
 }
 
 model PasswordResetToken {

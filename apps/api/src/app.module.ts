@@ -5,6 +5,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import Joi from 'joi';
 
 import { AuthModule } from './auth/auth.module.js';
+import { AuditModule } from './audit/audit.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
@@ -31,6 +32,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
       },
     ]),
     PrismaModule,
+    AuditModule,
     HealthModule,
     AuthModule,
     WorkspacesModule,

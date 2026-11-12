@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
-import { MembershipStatus, WorkspaceRole, WorkspaceType } from '../generated/prisma/client.js';
+import {
+  AuditEventType,
+  MembershipStatus,
+  WorkspaceRole,
+  WorkspaceType,
+} from '../generated/prisma/client.js';
+import type { AuditService } from '../audit/audit.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import type { TenantContextService } from '../prisma/tenant-context.service.js';
 import type { CreateWorkspaceDto } from './dto/create-workspace.dto.js';
@@ -46,6 +52,10 @@ describe('WorkspacesService', () => {
     requireRoles: vi.fn(),
   };
 
+  const auditMock = {
+    record: vi.fn(),
+  };
+
   let service: WorkspacesService;
 
   beforeEach(() => {
@@ -74,6 +84,7 @@ describe('WorkspacesService', () => {
       prismaMock as unknown as PrismaService,
       tenantMock as unknown as TenantContextService,
       workspaceAccessMock as unknown as WorkspaceAccessService,
+      auditMock as unknown as AuditService,
     );
   });
 
@@ -120,6 +131,11 @@ describe('WorkspacesService', () => {
       role: WorkspaceRole.OWNER,
       membershipStatus: MembershipStatus.ACTIVE,
       activeWorkspaceId: 'workspace-123',
+    });
+    expect(auditMock.record).toHaveBeenCalledWith({
+      type: AuditEventType.WORKSPACE_CREATED,
+      actorUserId: userId,
+      workspaceId: 'workspace-123',
     });
   });
 
@@ -266,6 +282,11 @@ describe('WorkspacesService', () => {
       message: 'Workspace switched successfully',
       activeWorkspaceId: 'workspace-123',
       role: WorkspaceRole.TEACHER,
+    });
+    expect(auditMock.record).toHaveBeenCalledWith({
+      type: AuditEventType.WORKSPACE_SWITCHED,
+      actorUserId: 'user-123',
+      workspaceId: 'workspace-123',
     });
   });
 

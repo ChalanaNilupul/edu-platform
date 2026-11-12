@@ -9,7 +9,13 @@ import {
 } from '@nestjs/common';
 
 import { createOpaqueToken, hashToken } from '../auth/token.util.js';
-import { InvitationStatus, MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
+import { AuditService } from '../audit/audit.service.js';
+import {
+  AuditEventType,
+  InvitationStatus,
+  MembershipStatus,
+  WorkspaceRole,
+} from '../generated/prisma/client.js';
 import { MailService } from '../mail/mail.service.js';
 import { TenantContextService } from '../prisma/tenant-context.service.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
@@ -24,6 +30,7 @@ export class InvitationsService {
     @Inject(TenantContextService) private readonly tenant: TenantContextService,
     @Inject(WorkspaceAccessService) private readonly workspaceAccess: WorkspaceAccessService,
     @Inject(MailService) private readonly mail: MailService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   async create(actorId: string, workspaceId: string, emailInput: string, role: WorkspaceRole) {
@@ -115,6 +122,14 @@ export class InvitationsService {
       );
     }
 
+    await this.audit.record({
+      type: AuditEventType.INVITATION_CREATED,
+      actorUserId: actorId,
+      workspaceId,
+      targetId: invitation.created.id,
+      metadata: { role },
+    });
+
     return invitation.created;
   }
 
@@ -149,7 +164,7 @@ export class InvitationsService {
   }
 
   async revoke(actorId: string, workspaceId: string, invitationId: string) {
-    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+    await this.tenant.runAsTenant(workspaceId, async (tx) => {
       await this.workspaceAccess.requireRoles(actorId, workspaceId, [WorkspaceRole.ADMIN], tx);
 
       const invitation = await tx.workspaceInvitation.findFirst({
@@ -175,9 +190,16 @@ export class InvitationsService {
         where: { id: invitation.id },
         data: { status: InvitationStatus.REVOKED },
       });
-
-      return { message: 'Invitation revoked' };
     });
+
+    await this.audit.record({
+      type: AuditEventType.INVITATION_REVOKED,
+      actorUserId: actorId,
+      workspaceId,
+      targetId: invitationId,
+    });
+
+    return { message: 'Invitation revoked' };
   }
 
   async accept(
@@ -281,6 +303,14 @@ export class InvitationsService {
       }
 
       return acceptedMembership;
+    });
+
+    await this.audit.record({
+      type: AuditEventType.INVITATION_ACCEPTED,
+      actorUserId: userId,
+      workspaceId: invitation.workspaceId,
+      targetId: invitation.id,
+      metadata: { role: invitation.role },
     });
 
     return {

@@ -12,9 +12,10 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 2 Batch 2 adds PostgreSQL RLS on `memberships` and `workspace_invitations`, transaction-scoped tenant context, and a real-database integration suite.
 - Phase 2 Batch 3 applies the security review fixes: a restricted runtime database role with a production startup check, required `NODE_ENV`, `TRUST_PROXY` support, a stricter login redirect and a fail-closed roles guard.
 - Invitation onboarding is hardened: acceptance requires a verified email address, and the acceptance page guides unverified invitees through verification. Registration now preserves the invitation `next` target.
-- Verified by 83 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and a successful `next build`.
-- Still open: browser walkthrough, runtime rate-limit/Origin verification, email-verification enforcement for other workspace actions, security-event audit logging, and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes) and `90b552b` (hydration fix) were pushed to `feat/phase-2-rbac-invitations`; the invitation-onboarding changes are not committed yet.
+- Security-event audit logging (finding M4) is implemented as an append-only `audit_events` table written through a best-effort `AuditService`.
+- Verified by 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and a successful `next build`.
+- Still open: browser walkthrough, runtime rate-limit/Origin verification, email-verification enforcement for other workspace actions, and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix) and `18b8bbd` (invitation onboarding) were pushed to `feat/phase-2-rbac-invitations`; the audit-logging changes are not committed yet.
 
 ---
 
@@ -409,11 +410,22 @@ Do not claim unverified checks are complete.
 - Verify rate limiting at runtime (configure `TRUST_PROXY` for the deployment topology first).
 - Verify Origin checking at runtime.
 - Enforce email verification before workspace actions (security review finding M1). Invitation acceptance now requires a verified email; workspace creation and other actions still allow unverified users.
-- Add structured audit logging for security events such as failed logins, role changes and invitation changes (finding M4).
+- ~~Add structured audit logging for security events such as failed logins, role changes and invitation changes (finding M4).~~ Implemented — see "Audit logging (M4)" below.
+- M4 follow-ups if needed: an admin-facing read/view of `audit_events`, retention policy, and auditing other sensitive actions as they are added.
 - Longer-term: stronger CSRF token scheme if the app adds cross-site embedding.
 - Longer-term: production mail delivery driver (the console driver only logs links).
 
 Implemented already: email verification, password reset, Origin/Referer enforcement, rate limiting, security headers.
+
+### Audit logging (M4)
+
+- Storage: one append-only `audit_events` table (`AuditEvent` model, migration `20261112182057_add_audit_events`) with an `AuditEventType` enum, nullable `actorUserId` / `workspaceId` / `targetId`, JSONB `metadata`, and time indexes per workspace, actor and type.
+- No foreign keys or relations: entries must survive user and workspace deletion. Treat rows as immutable; there is no update or delete path.
+- Writer: global `AuditService.record()` in `apps/api/src/audit/`. Failures are logged and swallowed, so a broken audit write never rolls back or fails the audited action.
+- Placement: events are recorded after the primary business transaction commits, so only successful state changes are audited (plus `LOGIN_FAILED`, which is the point of that event).
+- Covered events: `USER_REGISTERED`, `LOGIN_SUCCEEDED`, `LOGIN_FAILED`, `EMAIL_VERIFIED`, `EMAIL_VERIFICATION_RESENT`, `PASSWORD_RESET_REQUESTED`, `PASSWORD_RESET_COMPLETED`, `WORKSPACE_CREATED`, `WORKSPACE_SWITCHED`, `MEMBER_ROLE_CHANGED`, `MEMBER_REMOVED`, `INVITATION_CREATED`, `INVITATION_REVOKED`, `INVITATION_ACCEPTED`.
+- No read API yet. Query the table directly until an admin-facing viewer exists.
+- Database role: after `pnpm exec prisma migrate deploy`, re-run `pnpm db:setup-app-role` so the restricted runtime role receives grants on the new table.
 
 ## Workspace Management
 
@@ -662,10 +674,10 @@ Follow this order:
 
 1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
 2. Verify rate limiting and Origin checking at runtime.
-3. Decide whether to extend email-verification enforcement beyond invitation acceptance, and add audit logging for security events.
+3. Decide whether to extend email-verification enforcement beyond invitation acceptance.
 4. Start Phase 3 — Student Management.
 
-Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role and the Phase 2 security review are in place; browser verification, runtime security checks, the email-verification decision and audit logging remain open.
+Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role, audit logging and the Phase 2 security review are in place; browser verification, runtime security checks and the email-verification scope decision remain open.
 
 # 17. Development Rules for AI Assistance
 

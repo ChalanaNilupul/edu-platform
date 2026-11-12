@@ -8,11 +8,13 @@ import { createHash } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  AuditEventType,
   InvitationStatus,
   MembershipStatus,
   WorkspaceRole,
   WorkspaceType,
 } from '../generated/prisma/client.js';
+import type { AuditService } from '../audit/audit.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { TenantContextService } from '../prisma/tenant-context.service.js';
 import { InvitationsService } from './invitations.service.js';
@@ -58,6 +60,10 @@ describe('InvitationsService', () => {
     sendWorkspaceInvitation: vi.fn(),
   };
 
+  const auditMock = {
+    record: vi.fn(),
+  };
+
   let service: InvitationsService;
 
   beforeEach(() => {
@@ -75,6 +81,7 @@ describe('InvitationsService', () => {
       tenantMock as unknown as TenantContextService,
       workspaceAccessMock as unknown as WorkspaceAccessService,
       mailMock as unknown as MailService,
+      auditMock as unknown as AuditService,
     );
   });
 
@@ -126,6 +133,13 @@ describe('InvitationsService', () => {
       expect(upsertArgs.create.tokenHash).not.toBe(sentToken);
       expect(mailMock.sendWorkspaceInvitation).toHaveBeenCalledWith('new@example.com', sentToken);
       expect(result.email).toBe('new@example.com');
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.INVITATION_CREATED,
+        actorUserId: 'actor-123',
+        workspaceId: 'workspace-123',
+        targetId: 'invitation-123',
+        metadata: { role: WorkspaceRole.TEACHER },
+      });
     });
 
     it('rejects inviting a workspace owner', async () => {
@@ -268,6 +282,12 @@ describe('InvitationsService', () => {
         data: { status: InvitationStatus.REVOKED },
       });
       expect(result).toEqual({ message: 'Invitation revoked' });
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.INVITATION_REVOKED,
+        actorUserId: 'actor-123',
+        workspaceId: 'workspace-123',
+        targetId: 'invitation-123',
+      });
     });
   });
 
@@ -420,6 +440,14 @@ describe('InvitationsService', () => {
           role: WorkspaceRole.TEACHER,
           status: MembershipStatus.ACTIVE,
         },
+      });
+
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.INVITATION_ACCEPTED,
+        actorUserId: 'user-123',
+        workspaceId: 'workspace-123',
+        targetId: 'invitation-123',
+        metadata: { role: WorkspaceRole.TEACHER },
       });
     });
 

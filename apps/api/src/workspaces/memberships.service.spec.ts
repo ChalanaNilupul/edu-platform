@@ -1,7 +1,8 @@
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
+import { AuditEventType, MembershipStatus, WorkspaceRole } from '../generated/prisma/client.js';
+import type { AuditService } from '../audit/audit.service.js';
 import type { TenantContextService } from '../prisma/tenant-context.service.js';
 import { MembershipsService } from './memberships.service.js';
 import type { WorkspaceAccessService } from './workspace-access.service.js';
@@ -30,6 +31,10 @@ describe('MembershipsService', () => {
     requireRoles: vi.fn(),
   };
 
+  const auditMock = {
+    record: vi.fn(),
+  };
+
   let service: MembershipsService;
 
   beforeEach(() => {
@@ -43,6 +48,7 @@ describe('MembershipsService', () => {
     service = new MembershipsService(
       tenantMock as unknown as TenantContextService,
       workspaceAccessMock as unknown as WorkspaceAccessService,
+      auditMock as unknown as AuditService,
     );
   });
 
@@ -206,6 +212,13 @@ describe('MembershipsService', () => {
         },
       });
       expect(result.role).toBe(WorkspaceRole.ADMIN);
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.MEMBER_ROLE_CHANGED,
+        actorUserId: 'actor-123',
+        workspaceId: 'workspace-123',
+        targetId: 'membership-123',
+        metadata: { from: WorkspaceRole.TEACHER, to: WorkspaceRole.ADMIN },
+      });
     });
   });
 
@@ -300,6 +313,13 @@ describe('MembershipsService', () => {
         data: { activeWorkspaceId: null },
       });
       expect(result).toEqual({ message: 'Member removed' });
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.MEMBER_REMOVED,
+        actorUserId: 'actor-123',
+        workspaceId: 'workspace-123',
+        targetId: 'membership-123',
+        metadata: { role: WorkspaceRole.TEACHER },
+      });
     });
   });
 });

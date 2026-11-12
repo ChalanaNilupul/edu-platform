@@ -2,7 +2,8 @@ import { BadRequestException, ConflictException, UnauthorizedException } from '@
 import * as argon2 from 'argon2';
 import { createHash } from 'node:crypto';
 
-import { Prisma } from '../generated/prisma/client.js';
+import { AuditEventType, Prisma } from '../generated/prisma/client.js';
+import type { AuditService } from '../audit/audit.service.js';
 import type { MailService } from '../mail/mail.service.js';
 import type { PrismaService } from '../prisma/prisma.service.js';
 import { AuthService } from './auth.service.js';
@@ -41,6 +42,10 @@ describe('AuthService', () => {
     sendWorkspaceInvitation: vi.fn(),
   };
 
+  const auditMock = {
+    record: vi.fn(),
+  };
+
   const sha256 = (value: string) => createHash('sha256').update(value).digest('hex');
 
   beforeEach(() => {
@@ -53,6 +58,7 @@ describe('AuthService', () => {
     service = new AuthService(
       prismaMock as unknown as PrismaService,
       mailMock as unknown as MailService,
+      auditMock as unknown as AuditService,
     );
   });
 
@@ -88,6 +94,10 @@ describe('AuthService', () => {
       expect(result.user.email).toBe('test@example.com');
       expect(result.message).toBe('Account created successfully');
       expect(result.emailVerificationRequired).toBe(true);
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.USER_REGISTERED,
+        actorUserId: 'user-123',
+      });
     });
 
     it('should issue an email verification token and send the email', async () => {
@@ -197,6 +207,10 @@ describe('AuthService', () => {
       const sevenDays = 7 * 24 * 60 * 60 * 1000;
 
       expect(sessionArgs.data.expiresAt.getTime()).toBeGreaterThanOrEqual(startTime + sevenDays);
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.LOGIN_SUCCEEDED,
+        actorUserId: 'user-123',
+      });
     });
 
     it('should reject an unknown email address', async () => {
@@ -210,6 +224,10 @@ describe('AuthService', () => {
       ).rejects.toThrow('Invalid email or password');
 
       expect(prismaMock.session.create).not.toHaveBeenCalled();
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.LOGIN_FAILED,
+        metadata: { email: 'unknown@example.com' },
+      });
     });
 
     it('should reject an incorrect password', async () => {
@@ -231,6 +249,10 @@ describe('AuthService', () => {
       ).rejects.toThrow('Invalid email or password');
 
       expect(prismaMock.session.create).not.toHaveBeenCalled();
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.LOGIN_FAILED,
+        actorUserId: 'user-123',
+      });
     });
   });
 
@@ -279,6 +301,10 @@ describe('AuthService', () => {
         where: { userId: 'user-123' },
       });
       expect(result.message).toBe('Email verified successfully');
+      expect(auditMock.record).toHaveBeenCalledWith({
+        type: AuditEventType.EMAIL_VERIFIED,
+        actorUserId: 'user-123',
+      });
     });
 
     it('should reject an expired verification token', async () => {
