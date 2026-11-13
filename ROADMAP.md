@@ -4,7 +4,7 @@ Last updated: November 13, 2026
 
 ## Project Status
 
-**Current Phase: Phase 3 — Student Management (batch 1 delivered)**
+**Current Phase: Phase 3 — Student Management (batches 1–2 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -219,7 +219,7 @@ Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration 
 
 # Phase 3 — Student Management
 
-**Status: In progress — batch 1 (profiles + directory core) delivered**
+**Status: In progress — batches 1–2 (profiles/directory core, guardians) delivered**
 
 ### Student profiles and directory notes (November 13, 2026)
 
@@ -234,6 +234,21 @@ Students are workspace records with no login of their own; guardian links and CS
 
 Verified: 98 unit tests, 44 mocked HTTP E2E tests, 33 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner/teacher walkthrough of the directory.
 
+### Guardian records and links notes (November 13, 2026)
+
+Guardians are workspace-owned records linked to one or more students through a join table. Relationship lives on the guardian, so the same record is not shared across students yet.
+
+- `guardians` and `student_guardians` tables (migration `20261113090000_add_guardians`) with `FATHER/MOTHER/GUARDIAN/OTHER` relationships, optional contact and address fields, `(student_id, guardian_id)` uniqueness, and the same tenant RLS policies as the other workspace tables.
+- REST routes: `GET/POST /workspaces/:workspaceId/students/:studentId/guardians`, `GET/PATCH/DELETE /workspaces/:workspaceId/guardians/:guardianId`, and `DELETE /workspaces/:workspaceId/students/:studentId/guardians/:guardianId` to unlink.
+- Read access: OWNER (override), ADMIN, BRANCH_MANAGER, TEACHER. Write access: OWNER (override), ADMIN, BRANCH_MANAGER.
+- A student keeps at most one primary contact: the first guardian is primary by default, and adding a new primary demotes the previous one.
+- Guardians are created together with the student link; there is no "attach an existing guardian to another student" flow yet. Deleting a guardian is refused with 409 while any student link remains, so the UI unlinks first and then deletes.
+- Audit events `GUARDIAN_CREATED`, `GUARDIAN_UPDATED`, `GUARDIAN_UNLINKED` and `GUARDIAN_DELETED` store IDs, the student link and changed field names only. Updates are diffed like students.
+- Web UI: Guardians card on the student detail page with primary badge and contact summary, add/edit guardian pages and a remove action, all role-aware.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to create the new tables and refresh the client.
+
+Verified: 117 unit tests, 56 mocked HTTP E2E tests, 40 real-database integration tests, typecheck, lint, format and a manual owner walkthrough of adding, promoting, editing and removing guardians.
+
 ## 3.1 Student Profiles
 
 - [x] Implement student registration.
@@ -245,10 +260,10 @@ Verified: 98 unit tests, 44 mocked HTTP E2E tests, 33 real-database integration 
 
 ## 3.2 Parent and Guardian Management
 
-- [ ] Implement parent/guardian records.
-- [ ] Associate guardians with students.
-- [ ] Support multiple guardians where appropriate.
-- [ ] Store guardian contact information.
+- [x] Implement parent/guardian records.
+- [x] Associate guardians with students.
+- [x] Support multiple guardians where appropriate.
+- [x] Store guardian contact information.
 
 ## 3.3 Student Enrollment
 

@@ -46,6 +46,13 @@ enum StudentGender {
   OTHER
 }
 
+enum GuardianRelationship {
+  FATHER
+  MOTHER
+  GUARDIAN
+  OTHER
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -64,6 +71,10 @@ enum AuditEventType {
   STUDENT_CREATED
   STUDENT_UPDATED
   STUDENT_STATUS_CHANGED
+  GUARDIAN_CREATED
+  GUARDIAN_UPDATED
+  GUARDIAN_UNLINKED
+  GUARDIAN_DELETED
 }
 
 model User {
@@ -93,10 +104,12 @@ model Workspace {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  memberships    Membership[]
-  invitations    WorkspaceInvitation[]
-  students       Student[]
-  activeSessions Session[]             @relation("SessionActiveWorkspace")
+  memberships      Membership[]
+  invitations      WorkspaceInvitation[]
+  students         Student[]
+  guardians        Guardian[]
+  studentGuardians StudentGuardian[]
+  activeSessions   Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
 }
@@ -124,10 +137,55 @@ model Student {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  guardians StudentGuardian[]
+
   @@unique([workspaceId, studentCode])
   @@index([workspaceId, status])
   @@index([workspaceId, firstName, lastName])
   @@map("students")
+}
+
+model Guardian {
+  id            String               @id @default(uuid())
+  workspaceId   String               @map("workspace_id")
+  firstName     String               @map("first_name")
+  lastName      String?              @map("last_name")
+  relationship  GuardianRelationship
+  email         String?
+  phone         String?
+  occupation    String?
+  addressLine1  String?              @map("address_line1")
+  addressLine2  String?              @map("address_line2")
+  city          String?
+  district      String?
+  postalCode    String?              @map("postal_code")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  students  StudentGuardian[]
+
+  @@index([workspaceId, lastName, firstName])
+  @@map("guardians")
+}
+
+model StudentGuardian {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  studentId   String   @map("student_id")
+  guardianId  String   @map("guardian_id")
+  isPrimary   Boolean  @default(false) @map("is_primary")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  guardian  Guardian  @relation(fields: [guardianId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, guardianId])
+  @@index([workspaceId])
+  @@index([guardianId])
+  @@map("student_guardians")
 }
 
 model Membership {

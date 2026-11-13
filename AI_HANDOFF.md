@@ -14,9 +14,10 @@ It records the actual project direction, technical architecture, implementation 
 - Invitation onboarding is hardened: acceptance requires a verified email address, and the acceptance page guides unverified invitees through verification. Registration now preserves the invitation `next` target.
 - Security-event audit logging (finding M4) is implemented as an append-only `audit_events` table written through a best-effort `AuditService`.
 - Phase 3 Batch 1 is implemented: workspace-scoped student profiles with RLS, a students REST module, audit events, and a web directory with detail/create/edit pages.
-- Verified by 98 unit tests, 44 mocked HTTP E2E tests, 33 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner/teacher walkthrough of the student directory.
-- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian links and CSV import, and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding) and `6b4b29e` (audit logging) were pushed to `feat/phase-2-rbac-invitations`; Phase 3 batch 1 is on `feat/phase-3-student-profiles` and is not committed yet.
+- Phase 3 Batch 2 is implemented: workspace-scoped guardians with `StudentGuardian` links, a guardians REST module, primary-contact handling, audit events, and a Guardians card with add/edit/remove pages on the student detail screen.
+- Verified by 117 unit tests, 56 mocked HTTP E2E tests, 40 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner walkthrough of the student directory and guardian links.
+- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian reuse across students and CSV import, and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students) and `e1e35a4` (db:sync) were pushed on `feat/phase-3-student-profiles`; the guardian batch on the same branch is not committed yet.
 
 ---
 
@@ -51,7 +52,7 @@ Current development branch:
 
 Current development phase:
 
-**Phase 3 — Student Management (batch 1 delivered)**
+**Phase 3 — Student Management (batches 1–2 delivered)**
 
 Do not assume that Phase 2 or Phase 3 has been merged into `main`.
 
@@ -221,7 +222,25 @@ Workspace-owned student record; students do not have logins in this batch.
 - Status values: `ACTIVE`, `INACTIVE`, `GRADUATED`, `WITHDRAWN`. Gender values: `MALE`, `FEMALE`, `OTHER`.
 - `(workspaceId, studentCode)` is unique; indexes cover `(workspaceId, status)` and `(workspaceId, firstName, lastName)`.
 - `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy as the other tenant tables.
-- Guardian links, enrollment and CSV import are intentionally deferred to later batches.
+- Enrollment and CSV import are intentionally deferred to later batches.
+
+## Guardian
+
+Workspace-owned parent/guardian record; linked to students through `StudentGuardian`.
+
+- Fields: `firstName` (required), `lastName`, `relationship` (required), `email`, `phone`, `occupation` and address parts.
+- Relationship values: `FATHER`, `MOTHER`, `GUARDIAN`, `OTHER`. The relationship lives on the guardian, so a guardian record currently belongs to one student context.
+- Index covers `(workspaceId, lastName, firstName)`.
+- `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy as the other tenant tables.
+
+## StudentGuardian
+
+Join row linking a student to a guardian inside one workspace.
+
+- Fields: `workspaceId`, `studentId`, `guardianId`, `isPrimary` (default false).
+- `(studentId, guardianId)` is unique; indexes cover `(workspaceId)` and `(guardianId)`.
+- Cascades from `Workspace`, `Student` and `Guardian`. RLS is enabled and forced with the same tenant policy.
+- At most one primary contact per student is enforced in the service (not by a partial unique index).
 
 # 7. Authentication Implementation
 
@@ -335,7 +354,10 @@ Current application routes include:
     └── /workspaces/[workspaceId]/students
         ├── /workspaces/[workspaceId]/students/new
         └── /workspaces/[workspaceId]/students/[studentId]
-            └── /workspaces/[workspaceId]/students/[studentId]/edit
+            ├── /workspaces/[workspaceId]/students/[studentId]/edit
+            └── /workspaces/[workspaceId]/students/[studentId]/guardians
+                ├── /workspaces/[workspaceId]/students/[studentId]/guardians/new
+                └── /workspaces/[workspaceId]/students/[studentId]/guardians/[guardianId]/edit
 ```
 
 The dashboard currently contains:
@@ -356,6 +378,8 @@ The final dashboard must retrieve workspace-scoped information from the relevant
 
 The students directory, detail, create and edit pages were walked through in a browser against the dev API: owner create → detail → edit (including status change) and teacher read-only access (no Add button, restricted edit page). The same walkthrough confirmed `STUDENT_CREATED`, `STUDENT_UPDATED` and `STUDENT_STATUS_CHANGED` rows in `audit_events`.
 
+The guardian card was walked through the same way: add guardian (first one became primary), add a second guardian as primary (the first was demoted), edit the occupation, and remove a guardian (unlink then delete). `GUARDIAN_CREATED`, `GUARDIAN_UPDATED`, `GUARDIAN_UNLINKED` and `GUARDIAN_DELETED` rows matched the actions.
+
 # 9A. Phase 3 — Student Implementation
 
 Delivered in batch 1 (profiles + directory core):
@@ -368,13 +392,25 @@ Delivered in batch 1 (profiles + directory core):
 - Web: `apps/web/src/lib/workspace-session.ts` (shared session fetch and role helpers), `apps/web/src/components/student-form.tsx`, and the directory/detail/create/edit routes. The sidebar "Students" entry points at the active workspace.
 - Known gap: when the session has no `activeWorkspaceId`, the Students entry is shown as disabled until the user switches workspace once.
 
+# 9B. Phase 3 — Guardian Implementation
+
+Delivered in batch 2 (guardian records + student links):
+
+- API: `apps/api/src/guardians/` (controller, service, create/update DTOs, module). Routes: `GET/POST /workspaces/:workspaceId/students/:studentId/guardians`, `GET/PATCH/DELETE /workspaces/:workspaceId/guardians/:guardianId`, `DELETE /workspaces/:workspaceId/students/:studentId/guardians/:guardianId`.
+- Access: reads for OWNER/ADMIN/BRANCH_MANAGER/TEACHER, writes for OWNER/ADMIN/BRANCH_MANAGER, enforced twice (guard plus `WorkspaceAccessService.requireRoles`). The student must belong to the workspace before its guardian list is readable.
+- Creation always creates a new guardian record and links it in one transaction; there is no attach-existing-guardian flow. The first link for a student defaults to primary; an explicit primary link demotes the previous primary.
+- Delete is refused with 409 while the guardian is still linked; the web Remove action unlinks first and then deletes the record.
+- Audit: `GUARDIAN_CREATED` (student id and primary flag), `GUARDIAN_UPDATED` (changed field names), `GUARDIAN_UNLINKED` (student id) and `GUARDIAN_DELETED`. Updates are diffed, so a no-op save writes nothing.
+- Web: `apps/web/src/lib/guardian.ts`, `guardian-form.tsx`, `guardian-actions.tsx`, the Guardians card on the student detail page, and `students/[studentId]/guardians/new` plus `students/[studentId]/guardians/[guardianId]/edit`. Managers see the actions; teachers see a read-only card.
+- Migration `20261113090000_add_guardians` adds the enum, tables, indexes, foreign keys and RLS policies for both new tables.
+
 # 10. Testing Status
 
-Current verified results after Phase 3 batch 1:
+Current verified results after Phase 3 batch 2:
 
 ## Unit Tests
 
-98 tests passed across 11 files:
+117 tests passed across 12 files:
 
 - Authentication service.
 - Workspace service.
@@ -382,6 +418,7 @@ Current verified results after Phase 3 batch 1:
 - Memberships service.
 - Invitations service.
 - Students service.
+- Guardians service.
 - Session guard.
 - Workspace roles guard.
 - App setup (`TRUST_PROXY` parsing).
@@ -390,20 +427,22 @@ Current verified results after Phase 3 batch 1:
 
 ## E2E HTTP Tests
 
-44 tests passed across 4 files:
+56 tests passed across 5 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
 - Students E2E (11).
+- Guardians E2E (12).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-33 tests passed against a real PostgreSQL 17 database:
+40 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships and students), cross-tenant update/delete, system bypass and no leakage between transactions.
+- 7 guardian tests: create with primary defaulting and demotion, detail with linked students, diffed updates with audit metadata, unlink-then-delete with the 409 guard, teacher read-only access, cross-workspace isolation, invalid input and unauthenticated access.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians and links), cross-tenant update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -488,7 +527,8 @@ Implemented already: tenant context resolution through the session's active work
 
 ## Phase 3 Remaining Work
 
-- Student profiles and directory (3.1, 3.4) are delivered; guardians (3.2), enrollment (3.3) and CSV import (3.5) remain.
+- Student profiles and directory (3.1, 3.4) plus guardians (3.2) are delivered; enrollment (3.3) and CSV import (3.5) remain.
+- Reusing one guardian record across several students (for siblings) is not implemented; every guardian is created for one student context.
 - `STUDENT` and `PARENT` memberships still have no student-directory read access by design; revisit when the student portal phase starts.
 - Users without an active workspace must switch workspace once before the Students sidebar entry becomes a link.
 
@@ -616,11 +656,10 @@ After Phase 2, development should follow this sequence.
 
 ## Phase 3 — Student Management
 
-Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, and workspace-scoped RLS plus audit events.
+Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, guardian records and student links, and workspace-scoped RLS plus audit events.
 
 Still open:
 
-- Parent and guardian information.
 - Student enrollment.
 - CSV import with validation.
 
@@ -713,7 +752,7 @@ Follow this order:
 1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
 2. Verify rate limiting and Origin checking at runtime.
 3. Decide whether to extend email-verification enforcement beyond invitation acceptance.
-4. Start Phase 3 — Student Management.
+4. Continue Phase 3 — Student Management (enrollment, then CSV import).
 
 Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role, audit logging and the Phase 2 security review are in place; browser verification, runtime security checks and the email-verification scope decision remain open.
 

@@ -1,11 +1,17 @@
 export const instant = false;
 
 import Link from 'next/link';
-import { ArrowLeft, Pencil } from 'lucide-react';
+import { ArrowLeft, Pencil, Plus } from 'lucide-react';
 
 import { DashboardShell } from '@/components/dashboard-shell';
+import { GuardianActions } from '@/components/guardian-actions';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
 import { formatDate } from '@/lib/format-date';
+import {
+  guardianFullName,
+  guardianRelationshipLabels,
+  type GuardianListResponse,
+} from '@/lib/guardian';
 import {
   genderLabels,
   studentFullName,
@@ -93,6 +99,18 @@ export default async function StudentDetailPage({ params }: StudentPageProps) {
   }
 
   const student = (await response.json()) as StudentRecord;
+
+  const guardiansResponse = await fetch(
+    `${apiUrl}/workspaces/${workspace.id}/students/${studentId}/guardians`,
+    { headers, cache: 'no-store' },
+  );
+
+  if (!guardiansResponse.ok) {
+    throw new Error('Unable to load the student guardians.');
+  }
+
+  const { items: guardianLinks } = (await guardiansResponse.json()) as GuardianListResponse;
+
   const canManage = canManageStudents(workspace.role);
   const address = [
     student.addressLine1,
@@ -170,6 +188,80 @@ export default async function StudentDetailPage({ params }: StudentPageProps) {
             <Detail label="Email" value={student.email} />
             <Detail label="Address" value={address} />
           </dl>
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Guardians</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Parents and guardians linked to {student.firstName}.
+              </p>
+            </div>
+
+            {canManage ? (
+              <Link
+                href={`/workspaces/${workspace.id}/students/${student.id}/guardians/new`}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-200 px-3.5 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <Plus size={16} />
+                Add guardian
+              </Link>
+            ) : null}
+          </div>
+
+          {guardianLinks.length === 0 ? (
+            <p className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+              No guardians linked yet.
+            </p>
+          ) : (
+            <ul className="mt-5 divide-y divide-slate-100">
+              {guardianLinks.map((link) => (
+                <li
+                  key={link.id}
+                  className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-start sm:justify-between"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="text-sm font-semibold text-slate-900">
+                        {guardianFullName(link.guardian)}
+                      </p>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                        {guardianRelationshipLabels[link.guardian.relationship]}
+                      </span>
+                      {link.isPrimary ? (
+                        <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                          Primary
+                        </span>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {[link.guardian.phone, link.guardian.email, link.guardian.occupation]
+                        .filter(Boolean)
+                        .join(' · ') || 'No contact details yet'}
+                    </p>
+                  </div>
+
+                  {canManage ? (
+                    <div className="flex items-center gap-4">
+                      <Link
+                        href={`/workspaces/${workspace.id}/students/${student.id}/guardians/${link.guardian.id}/edit`}
+                        className="text-sm font-semibold text-blue-600 transition hover:text-blue-700"
+                      >
+                        Edit
+                      </Link>
+                      <GuardianActions
+                        workspaceId={workspace.id}
+                        studentId={student.id}
+                        guardianId={link.guardian.id}
+                        guardianName={guardianFullName(link.guardian)}
+                      />
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
