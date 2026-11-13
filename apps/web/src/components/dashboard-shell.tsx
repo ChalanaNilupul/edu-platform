@@ -22,7 +22,7 @@ const navigation = [
   { label: 'Workspaces', icon: Building2, href: '/workspaces' },
   { label: 'Students', icon: Users },
   { label: 'Teachers', icon: GraduationCap },
-  { label: 'Classes & Batches', icon: BookOpen },
+  { label: 'Classes', icon: BookOpen },
   { label: 'Attendance', icon: ClipboardCheck },
   { label: 'Finance', icon: Wallet },
   { label: 'Learning', icon: Library },
@@ -69,8 +69,9 @@ type DashboardUser = {
 
 type DashboardShellProps = {
   user: DashboardUser;
-  activePage?: 'Dashboard' | 'Workspaces' | 'Students';
+  activePage?: 'Dashboard' | 'Workspaces' | 'Students' | 'Classes';
   studentsHref?: string;
+  classesHref?: string;
   children?: ReactNode;
 };
 
@@ -78,6 +79,7 @@ export function DashboardShell({
   user,
   activePage = 'Dashboard',
   studentsHref,
+  classesHref,
   children,
 }: DashboardShellProps) {
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -120,7 +122,12 @@ export function DashboardShell({
             {navigation.map((item) => {
               const Icon = item.icon;
               const isActive = item.label === activePage;
-              const href = item.label === 'Students' ? studentsHref : item.href;
+              const href =
+                item.label === 'Students'
+                  ? studentsHref
+                  : item.label === 'Classes'
+                    ? classesHref
+                    : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive

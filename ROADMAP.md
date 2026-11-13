@@ -4,7 +4,7 @@ Last updated: November 13, 2026
 
 ## Project Status
 
-**Current Phase: Phase 3 — Student Management (batches 1–3 delivered)**
+**Current Phase: Phase 3 — Student Management (batches 1–4 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -219,7 +219,7 @@ Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration 
 
 # Phase 3 — Student Management
 
-**Status: In progress — batches 1–3 (profiles/directory core, guardians, CSV import) delivered**
+**Status: In progress — batches 1–4 (profiles/directory core, guardians, CSV import, classes/enrollment) delivered**
 
 ### Student profiles and directory notes (November 13, 2026)
 
@@ -264,6 +264,21 @@ Import is a two-step, preview-first flow: validate the file, review every row, t
 
 Verified: 143 unit tests, 61 mocked HTTP E2E tests, 46 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of an invalid file, a mixed file and a repeat upload.
 
+### Classes and enrollment notes (November 13, 2026)
+
+Classes are deliberately minimal for now: a name, optional grade/description/capacity and an active/archived status, owned by the workspace. Enrollment is append-only history rather than a mutable link.
+
+- `classes` and `enrollments` tables (migrations `20261113150000_add_classes_and_enrollments` and `20261113151000_add_class_deleted_audit`) with tenant RLS, `(workspace_id, name)` uniqueness and a Postgres partial unique index `(student_id, class_id) WHERE status = 'ACTIVE'`, which the Prisma schema cannot express.
+- REST routes: `GET/POST /workspaces/:workspaceId/classes`, `GET/PATCH/DELETE /workspaces/:workspaceId/classes/:classId`, `GET/POST /workspaces/:workspaceId/classes/:classId/enrollments`, `PATCH /workspaces/:workspaceId/enrollments/:enrollmentId`, and `GET /workspaces/:workspaceId/students/:studentId/enrollments`.
+- Read access: OWNER (override), ADMIN, BRANCH_MANAGER, TEACHER. Write access: OWNER (override), ADMIN, BRANCH_MANAGER.
+- Capacity is optional (1–1000) and checked when enrolling or reactivating; completed/withdrawn rows do not count. Enrolling in an archived class is refused. Classes with any enrollment rows cannot be deleted (409) and should be archived instead.
+- Status values: class `ACTIVE/ARCHIVED`; enrollment `ACTIVE/COMPLETED/WITHDRAWN`. Moving away from `ACTIVE` sets `endedAt`; reactivating clears it. Re-enrollment after completion keeps the old row.
+- Audit events `CLASS_CREATED`, `CLASS_UPDATED`, `CLASS_DELETED`, `STUDENT_ENROLLED` and `ENROLLMENT_UPDATED` store IDs, changed field names and status transitions only — no student names or notes.
+- Web UI: `/workspaces/[workspaceId]/classes` (search, status filter, pagination), create/edit pages, a class detail page with the enroll picker plus roster actions, and a Classes card on the student detail page. Sidebar gains a "Classes" entry.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply both migrations and refresh the client.
+
+Verified: 178 unit tests, 75 mocked HTTP E2E tests, 54 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of class creation, enrollment, capacity refusal, completion/reactivation, archiving, deletion protection and student-side history.
+
 ## 3.1 Student Profiles
 
 - [x] Implement student registration.
@@ -282,11 +297,11 @@ Verified: 143 unit tests, 61 mocked HTTP E2E tests, 46 real-database integration
 
 ## 3.3 Student Enrollment
 
-- [ ] Implement student enrollment.
-- [ ] Associate students with workspaces.
-- [ ] Support enrollment into multiple classes.
-- [ ] Implement enrollment history.
-- [ ] Implement enrollment status management.
+- [x] Implement student enrollment.
+- [x] Associate students with workspaces.
+- [x] Support enrollment into multiple classes.
+- [x] Implement enrollment history.
+- [x] Implement enrollment status management.
 
 ## 3.4 Student Directory
 
@@ -318,13 +333,13 @@ Verified: 143 unit tests, 61 mocked HTTP E2E tests, 46 real-database integration
 
 # Phase 5 — Classes and Batches
 
-**Status: Not Started**
+**Status: Partially started — class records, capacity and student enrollment were delivered with Phase 3 batch 4**
 
 - [ ] Implement class and batch creation.
 - [ ] Implement subject management.
 - [ ] Assign teachers to classes.
-- [ ] Enroll students into classes.
-- [ ] Implement class capacity.
+- [x] Enroll students into classes.
+- [x] Implement class capacity.
 - [ ] Implement timetable management.
 - [ ] Implement class schedules.
 - [ ] Implement class history.

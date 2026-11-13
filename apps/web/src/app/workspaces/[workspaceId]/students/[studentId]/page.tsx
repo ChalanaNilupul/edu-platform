@@ -6,6 +6,11 @@ import { ArrowLeft, Pencil, Plus } from 'lucide-react';
 import { DashboardShell } from '@/components/dashboard-shell';
 import { GuardianActions } from '@/components/guardian-actions';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
+import {
+  enrollmentStatusClasses,
+  enrollmentStatusLabels,
+  type EnrollmentRecord,
+} from '@/lib/classes';
 import { formatDate } from '@/lib/format-date';
 import {
   guardianFullName,
@@ -110,6 +115,17 @@ export default async function StudentDetailPage({ params }: StudentPageProps) {
   }
 
   const { items: guardianLinks } = (await guardiansResponse.json()) as GuardianListResponse;
+
+  const enrollmentsResponse = await fetch(
+    `${apiUrl}/workspaces/${workspace.id}/students/${studentId}/enrollments`,
+    { headers, cache: 'no-store' },
+  );
+
+  if (!enrollmentsResponse.ok) {
+    throw new Error('Unable to load the student classes.');
+  }
+
+  const enrollments = (await enrollmentsResponse.json()) as EnrollmentRecord[];
 
   const canManage = canManageStudents(workspace.role);
   const address = [
@@ -258,6 +274,63 @@ export default async function StudentDetailPage({ params }: StudentPageProps) {
                       />
                     </div>
                   ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Classes</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Enrollment history for {student.firstName}.
+              </p>
+            </div>
+
+            <Link
+              href={`/workspaces/${workspace.id}/classes`}
+              className="text-sm font-semibold text-blue-600 transition hover:text-blue-700"
+            >
+              Manage classes
+            </Link>
+          </div>
+
+          {enrollments.length === 0 ? (
+            <p className="mt-5 rounded-xl border border-dashed border-slate-200 px-4 py-6 text-center text-sm text-slate-500">
+              Not enrolled in any class yet.
+            </p>
+          ) : (
+            <ul className="mt-5 divide-y divide-slate-100">
+              {enrollments.map((enrollment) => (
+                <li
+                  key={enrollment.id}
+                  className="flex flex-col gap-2 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/workspaces/${workspace.id}/classes/${enrollment.class.id}`}
+                        className="text-sm font-semibold text-slate-900 transition hover:text-blue-600"
+                      >
+                        {enrollment.class.name}
+                      </Link>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${enrollmentStatusClasses[enrollment.status]}`}
+                      >
+                        {enrollmentStatusLabels[enrollment.status]}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Enrolled {formatDate(enrollment.enrolledAt)}
+                      {enrollment.endedAt ? ` · Ended ${formatDate(enrollment.endedAt)}` : ''}
+                    </p>
+                  </div>
+
+                  <p className="text-xs text-slate-500">
+                    {enrollment.class.grade ?? 'No grade set'}
+                  </p>
                 </li>
               ))}
             </ul>

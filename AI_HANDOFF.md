@@ -16,9 +16,10 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 3 Batch 1 is implemented: workspace-scoped student profiles with RLS, a students REST module, audit events, and a web directory with detail/create/edit pages.
 - Phase 3 Batch 2 is implemented: workspace-scoped guardians with `StudentGuardian` links, a guardians REST module, primary-contact handling, audit events, and a Guardians card with add/edit/remove pages on the student detail screen.
 - Phase 3 Batch 3 is implemented: preview-first CSV student import with a hand-written RFC 4180 parser, validate/import endpoints, duplicate skipping, a `STUDENTS_IMPORTED` audit event, and a role-aware import page.
-- Verified by 143 unit tests, 61 mocked HTTP E2E tests, 46 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of the student directory, guardian links and CSV import.
-- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian reuse across students, enrollment (3.3), and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync) and `c4331d1` (guardians) were pushed on `feat/phase-3-student-profiles`; the CSV import batch on the same branch is not committed yet.
+- Phase 3 Batch 4 is implemented: workspace-scoped classes and append-only enrollment history, with capacity/archive rules, roster and student-class views, audit events, and a role-aware classes UI.
+- Verified by 178 unit tests, 75 mocked HTTP E2E tests, 54 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of the student directory, guardian links, CSV import, classes and enrollment.
+- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian reuse across students, teacher assignment/timetables for classes, and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API) and `2ede95d` (CSV import page) were pushed on `feat/phase-3-student-profiles`; the classes/enrollment batch on the same branch is not committed yet.
 
 ---
 
@@ -53,7 +54,7 @@ Current development branch:
 
 Current development phase:
 
-**Phase 3 — Student Management (batches 1–2 delivered)**
+**Phase 3 — Student Management (batches 1–4 delivered)**
 
 Do not assume that Phase 2 or Phase 3 has been merged into `main`.
 
@@ -223,7 +224,7 @@ Workspace-owned student record; students do not have logins in this batch.
 - Status values: `ACTIVE`, `INACTIVE`, `GRADUATED`, `WITHDRAWN`. Gender values: `MALE`, `FEMALE`, `OTHER`.
 - `(workspaceId, studentCode)` is unique; indexes cover `(workspaceId, status)` and `(workspaceId, firstName, lastName)`.
 - `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy as the other tenant tables.
-- Enrollment is intentionally deferred to a later batch. Bulk CSV creation is handled by the import service (see 9C) rather than by this model.
+- Enrollment history lives in `Enrollment` rows (see below). Bulk CSV creation is handled by the import service (see 9C) rather than by this model.
 
 ## Guardian
 
@@ -242,6 +243,25 @@ Join row linking a student to a guardian inside one workspace.
 - `(studentId, guardianId)` is unique; indexes cover `(workspaceId)` and `(guardianId)`.
 - Cascades from `Workspace`, `Student` and `Guardian`. RLS is enabled and forced with the same tenant policy.
 - At most one primary contact per student is enforced in the service (not by a partial unique index).
+
+## Class
+
+Workspace-owned teaching group that students are enrolled into; it has no teacher assignment, schedule or subject yet.
+
+- Fields: `name` (required), `grade`, `description`, `capacity` (optional, 1–1000), `status` (`ACTIVE`/`ARCHIVED`).
+- `(workspaceId, name)` is unique; indexes cover `(workspaceId, status)`.
+- `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy.
+- A class with any enrollment row cannot be deleted (409); archive it instead. Capacity is checked when enrolling or reactivating (completed/withdrawn rows do not count).
+
+## Enrollment
+
+One row per enrollment period, so history survives re-enrollment.
+
+- Fields: `workspaceId`, `studentId`, `classId`, `status` (`ACTIVE`/`COMPLETED`/`WITHDRAWN`), `enrolledAt` (date), `endedAt` (date, nullable), `notes`.
+- A partial unique index on `(student_id, class_id) WHERE status = 'ACTIVE'` allows at most one active enrollment per student per class while keeping past rows; a unique violation maps to a 409.
+- Moving away from `ACTIVE` sets `endedAt`; reactivating clears it and re-checks capacity. Enrolled students are excluded from the class's enroll picker.
+- Cascades from `Workspace`, `Student` and `Class`. RLS is enabled and forced with the same tenant policy.
+- Indexes cover `(workspaceId, classId, status)` and `(workspaceId, studentId)`.
 
 # 7. Authentication Implementation
 
@@ -352,6 +372,10 @@ Current application routes include:
 ├── /invitations/accept
 └── /workspaces
     ├── /workspaces/[workspaceId]/members
+    ├── /workspaces/[workspaceId]/classes
+    │   ├── /workspaces/[workspaceId]/classes/new
+    │   └── /workspaces/[workspaceId]/classes/[classId]
+    │       └── /workspaces/[workspaceId]/classes/[classId]/edit
     └── /workspaces/[workspaceId]/students
         ├── /workspaces/[workspaceId]/students/new
         ├── /workspaces/[workspaceId]/students/import
@@ -383,6 +407,8 @@ The students directory, detail, create and edit pages were walked through in a b
 The guardian card was walked through the same way: add guardian (first one became primary), add a second guardian as primary (the first was demoted), edit the occupation, and remove a guardian (unlink then delete). `GUARDIAN_CREATED`, `GUARDIAN_UPDATED`, `GUARDIAN_UNLINKED` and `GUARDIAN_DELETED` rows matched the actions.
 
 The CSV import page was walked through with three files: an invalid email row (import blocked, error line shown), a mixed file with an in-file duplicate (2 ready, 1 duplicate; importing created 2 students and skipped 1), and the same mixed file again (both codes reported as existing, import button disabled). The directory then showed the imported records with the lower-cased email, the quoted comma in a last name and the `GRADUATED` status intact.
+
+The classes and enrollment flow was walked through in a browser: empty classes list → create a class with capacity 2 → enroll two students from the search picker (roster and `2 / 2 enrolled` count updated) → a third student was refused with "Class has reached its enrollment capacity" → complete an enrollment (ended date set, capacity freed) → reactivate it (ended date cleared) → archive the class (enroll form replaced by a notice, delete refused while enrollment rows exist) → reactivate → delete a separate empty class successfully. The student detail page showed the enrolled class, status and dates. `CLASS_CREATED`, `CLASS_UPDATED`, `STUDENT_ENROLLED`, `ENROLLMENT_UPDATED` and `CLASS_DELETED` rows in `audit_events` carried IDs and field names only.
 
 # 9A. Phase 3 — Student Implementation
 
@@ -422,13 +448,30 @@ Delivered in batch 3 (preview-first bulk student creation):
 - Web: `apps/web/src/lib/student-import.ts` (types and limits), `student-import.tsx` (client file picker, template download, preview table with counts and per-row errors, import/result panels) and `students/import/page.tsx` (role-aware server page). Managers get an "Import CSV" action on the directory next to "Add student".
 - Import does not check for duplicate people, only duplicate codes: rows without a `student_code` are always created. Tell users to fill the code column when they need repeat-safe files.
 
+# 9D. Phase 3 — Classes and Enrollment Implementation
+
+Delivered in batch 4 (classes + enrollment history):
+
+- API: `apps/api/src/classes/` (classes and enrollments controllers/services, DTOs, module), registered in `AppModule`. Routes:
+  - `GET/POST /workspaces/:workspaceId/classes`, `GET/PATCH/DELETE /workspaces/:workspaceId/classes/:classId`.
+  - `GET/POST /workspaces/:workspaceId/classes/:classId/enrollments`, `PATCH /workspaces/:workspaceId/enrollments/:enrollmentId`.
+  - `GET /workspaces/:workspaceId/students/:studentId/enrollments`.
+- Access: reads for OWNER/ADMIN/BRANCH_MANAGER/TEACHER, writes for OWNER/ADMIN/BRANCH_MANAGER, enforced twice (guard plus `WorkspaceAccessService.requireRoles`). Every lookup is workspace-scoped, so another workspace's class or student returns 404.
+- List: search over name/grade/description, optional status filter, `page`/`pageSize` capped at 100 (default 20), newest first, with an active-enrollment count per class.
+- Create/update: duplicate class names return 409; updates are diffed, so a no-op save writes nothing. Capacity is optional; the update DTO accepts `null` to clear it. Deleting a class with enrollment rows returns 409 with an archive hint.
+- Enrollment: capacity and archived-class checks run inside the tenant transaction; the partial unique index plus a 409 handle concurrent duplicates; moving away from `ACTIVE` sets `endedAt`, reactivating clears it and re-checks capacity. Re-enrollment after completion is supported and keeps the old row.
+- Audit: `CLASS_CREATED`, `CLASS_UPDATED` (changed field names), `CLASS_DELETED`, `STUDENT_ENROLLED` (`classId`, `studentId`) and `ENROLLMENT_UPDATED` (`classId`, `studentId`, changed fields, `from`/`to` when status changed). No student names or notes are stored.
+- Migrations: `20261113150000_add_classes_and_enrollments` (enums, tables, indexes, foreign keys, RLS) and `20261113151000_add_class_deleted_audit` (additive `CLASS_DELETED` enum value).
+- Web: `apps/web/src/lib/classes.ts`, `class-form.tsx`, `class-actions.tsx`, `enroll-student-form.tsx`, `enrollment-actions.tsx`; routes `classes`, `classes/new`, `classes/[classId]` (roster, enroll picker, archive/delete) and `classes/[classId]/edit`; a Classes card on the student detail page; a "Classes" sidebar entry with active-page state.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply both migrations and refresh the client.
+
 # 10. Testing Status
 
-Current verified results after Phase 3 batch 3:
+Current verified results after Phase 3 batch 4:
 
 ## Unit Tests
 
-143 tests passed across 14 files:
+178 tests passed across 16 files:
 
 - Authentication service.
 - Workspace service.
@@ -439,6 +482,8 @@ Current verified results after Phase 3 batch 3:
 - Students import service (17 tests covering report shape, per-row errors, in-file and existing duplicates, import counts, blocked invalid files, limits and role rejection).
 - CSV parser (9 tests covering quoting, escapes, embedded newlines, BOM, CRLF, line numbers and malformed input).
 - Guardians service.
+- Classes service (16 tests covering list/search/pagination, duplicate names, diffed updates, delete guard and role checks).
+- Enrollments service (19 tests covering capacity, archived classes, history, status transitions, `endedAt` handling, duplicate 409 and role checks).
 - Session guard.
 - Workspace roles guard.
 - App setup (`TRUST_PROXY` parsing).
@@ -447,23 +492,25 @@ Current verified results after Phase 3 batch 3:
 
 ## E2E HTTP Tests
 
-61 tests passed across 5 files:
+75 tests passed across 6 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
 - Students E2E (16, including import routing, role refusal and payload validation).
 - Guardians E2E (12).
+- Classes and enrollment E2E (14).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-46 tests passed against a real PostgreSQL 17 database:
+54 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
 - 7 guardian tests: create with primary defaulting and demotion, detail with linked students, diffed updates with audit metadata, unlink-then-delete with the 409 guard, teacher read-only access, cross-workspace isolation, invalid input and unauthenticated access.
 - 6 import tests: validate/import with in-file and existing duplicates (including that a repeat import never overwrites), rejected invalid files with no writes, per-workspace code scoping, malformed CSV messages, teacher refusal and outsider/unauthenticated access.
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians and links), cross-tenant update/delete, system bypass and no leakage between transactions.
+- 8 classes/enrollment tests: class lifecycle with audit metadata, capacity and archived-class rules, enrollment history including re-enrollment ordering, teacher read-only access, cross-workspace isolation, invalid data, duplicate active enrollment and unauthenticated access.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes and enrollments), cross-tenant update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -548,7 +595,7 @@ Implemented already: tenant context resolution through the session's active work
 
 ## Phase 3 Remaining Work
 
-- Student profiles and directory (3.1, 3.4), guardians (3.2) and CSV import (3.5) are delivered; enrollment (3.3) remains.
+- Student profiles and directory (3.1, 3.4), guardians (3.2), CSV import (3.5) and enrollment (3.3) are delivered. Classes here are deliberately minimal; teacher assignment, subjects, schedules and timetables belong to Phase 5.
 - Reusing one guardian record across several students (for siblings) is not implemented; every guardian is created for one student context.
 - `STUDENT` and `PARENT` memberships still have no student-directory read access by design; revisit when the student portal phase starts.
 - Users without an active workspace must switch workspace once before the Students sidebar entry becomes a link.
@@ -677,11 +724,11 @@ After Phase 2, development should follow this sequence.
 
 ## Phase 3 — Student Management
 
-Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, guardian records and student links, preview-first CSV import with duplicate skipping, and workspace-scoped RLS plus audit events.
+Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, guardian records and student links, preview-first CSV import with duplicate skipping, classes with capacity/archive rules, enrollment history with status management, and workspace-scoped RLS plus audit events.
 
 Still open:
 
-- Student enrollment.
+- Bulk class/section management and enrollment import (not requested yet).
 
 ## Phase 4 — Teacher Management
 
@@ -692,12 +739,13 @@ Still open:
 
 ## Phase 5 — Classes and Batches
 
-- Class creation.
+Partially started: class records, capacity and student enrollment were delivered with Phase 3 batch 4. Remaining:
+
 - Batch management.
 - Subjects.
 - Teacher assignments.
-- Student enrollment.
-- Timetables.
+- Timetables and schedules.
+- Class history beyond enrollment periods.
 
 ## Phase 6 — Attendance
 
@@ -772,7 +820,7 @@ Follow this order:
 1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
 2. Verify rate limiting and Origin checking at runtime.
 3. Decide whether to extend email-verification enforcement beyond invitation acceptance.
-4. Continue Phase 3 — Student Management (enrollment).
+4. Continue Phase 3 — remaining student-management polish (bulk enrollment/import and guardian reuse), or move to Phase 4 teacher management after that.
 
 Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role, audit logging and the Phase 2 security review are in place; browser verification, runtime security checks and the email-verification scope decision remain open.
 
