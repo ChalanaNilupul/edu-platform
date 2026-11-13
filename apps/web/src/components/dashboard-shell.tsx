@@ -71,8 +71,9 @@ type DashboardUser = {
 
 type DashboardShellProps = {
   user: DashboardUser;
-  activePage?: 'Dashboard' | 'Workspaces' | 'Students' | 'Classes';
+  activePage?: 'Dashboard' | 'Workspaces' | 'Students' | 'Teachers' | 'Classes';
   studentsHref?: string;
+  teachersHref?: string;
   classesHref?: string;
   children?: ReactNode;
 };
@@ -81,9 +82,16 @@ export function DashboardShell({
   user,
   activePage = 'Dashboard',
   studentsHref,
+  teachersHref,
   classesHref,
   children,
 }: DashboardShellProps) {
+  const resolvedTeachersHref =
+    teachersHref ??
+    (studentsHref?.endsWith('/students')
+      ? `${studentsHref.slice(0, -'/students'.length)}/teachers`
+      : undefined);
+
   const resolvedClassesHref =
     classesHref ??
     (studentsHref?.endsWith('/students')
@@ -133,9 +141,11 @@ export function DashboardShell({
               const href =
                 item.label === 'Students'
                   ? studentsHref
-                  : item.label === 'Classes'
-                    ? resolvedClassesHref
-                    : item.href;
+                  : item.label === 'Teachers'
+                    ? resolvedTeachersHref
+                    : item.label === 'Classes'
+                      ? resolvedClassesHref
+                      : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive

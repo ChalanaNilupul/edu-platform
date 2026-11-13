@@ -80,3 +80,11 @@ export function canManageClasses(role: WorkspaceRole) {
 export function canViewClasses(role: WorkspaceRole) {
   return canViewStudents(role);
 }
+
+export function canManageTeachers(role: WorkspaceRole) {
+  return canManageStudents(role);
+}
+
+export function canViewTeachers(role: WorkspaceRole) {
+  return canViewStudents(role);
+}

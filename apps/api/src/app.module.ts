@@ -11,6 +11,7 @@ import { GuardiansModule } from './guardians/guardians.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { StudentsModule } from './students/students.module.js';
+import { TeachersModule } from './teachers/teachers.module.js';
 import { WorkspacesModule } from './workspaces/workspaces.module.js';
 
 @Module({
@@ -42,6 +43,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     StudentsModule,
     GuardiansModule,
     ClassesModule,
+    TeachersModule,
   ],
   providers: [
     // Rate limiting is exercised separately; disable it for database integration

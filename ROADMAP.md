@@ -334,15 +334,29 @@ Verified: 178 unit tests, 75 mocked HTTP E2E tests, 54 real-database integration
 
 # Phase 4 — Teacher Management
 
-**Status: Not Started**
+**Status: In progress — batch 1 (profiles and directory) delivered; class assignments and weekly availability remain**
 
-- [ ] Implement teacher profiles.
-- [ ] Implement teacher invitations.
-- [ ] Associate teachers with workspaces.
-- [ ] Implement teacher membership and permissions.
+### Teacher profiles and directory notes (November 14, 2026)
+
+Teachers are existing workspace members. Batch 1 adds a profile that hangs off the membership, so invitations, roles and permissions continue to use the Phase 2 membership model — no second teacher record was introduced.
+
+- `teacher_profiles` table (migration `20261113191154_add_teacher_profiles`) with optional phone, qualifications, `specializations` text array, bio, `joined_at` date and internal notes; one profile per membership (`membership_id` unique) with cascade deletes and tenant RLS matching the other workspace tables.
+- REST routes under `/workspaces/:workspaceId/teachers`: list (search across name/email/qualifications/specializations, status filter, pagination), detail by membership id, and `PATCH /:membershipId/profile` which creates the profile on first save.
+- Directory eligibility: members with role TEACHER plus any member (owner, admin, branch manager) who has a profile, so managers who also teach can appear. Read access: OWNER (override), ADMIN, BRANCH_MANAGER, TEACHER. Managers (OWNER/ADMIN/BRANCH_MANAGER) edit any profile; a teacher may edit only their own membership.
+- Saving an entirely empty profile is rejected; blank text is stored as null and specializations are trimmed, capped at 10 entries of 50 characters.
+- Audit events `TEACHER_PROFILE_CREATED` and `TEACHER_PROFILE_UPDATED` record the profile id and changed field names only — no free-text content.
+- Web UI: `/workspaces/[workspaceId]/teachers` directory with search/status filter/pagination, a teacher detail page (contact, qualifications, specialization chips, bio, notes) and add/edit profile pages. The sidebar gains a "Teachers" entry derived from the students href, and students/parents get a restricted-access notice.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to create the table, apply RLS and refresh the role grants.
+
+Verified: 191 unit tests, 81 mocked HTTP E2E tests, 61 real-database integration tests (including RLS on `teacher_profiles`), typecheck, lint, format, API build, `next build` and a browser walkthrough (owner adds a profile, teacher edits their own, student sees the restricted notice).
+
+- [x] Implement teacher profiles.
+- [x] Implement teacher invitations (delivered with the Phase 2 invitation flow).
+- [x] Associate teachers with workspaces (Phase 2 memberships).
+- [x] Implement teacher membership and permissions (Phase 2 roles and guards).
 - [ ] Implement teacher assignments.
 - [ ] Implement teacher availability.
-- [ ] Implement teacher directory.
+- [x] Implement teacher directory.
 
 # Phase 5 — Classes and Batches
 

@@ -92,6 +92,8 @@ enum AuditEventType {
   CLASS_DELETED
   STUDENT_ENROLLED
   ENROLLMENT_UPDATED
+  TEACHER_PROFILE_CREATED
+  TEACHER_PROFILE_UPDATED
 }
 
 model User {
@@ -128,6 +130,7 @@ model Workspace {
   studentGuardians StudentGuardian[]
   classes          Class[]
   enrollments      Enrollment[]
+  teacherProfiles  TeacherProfile[]
   activeSessions   Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -262,10 +265,32 @@ model Membership {
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
+  teacherProfile TeacherProfile?
+
   @@unique([userId, workspaceId])
   @@index([workspaceId])
   @@index([workspaceId, role])
   @@map("memberships")
+}
+
+model TeacherProfile {
+  id              String    @id @default(uuid())
+  workspaceId     String    @map("workspace_id")
+  membershipId    String    @unique @map("membership_id")
+  phone           String?
+  qualifications  String?
+  specializations String[]  @default([])
+  bio             String?
+  joinedAt        DateTime? @db.Date @map("joined_at")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("teacher_profiles")
 }
 
 model WorkspaceInvitation {

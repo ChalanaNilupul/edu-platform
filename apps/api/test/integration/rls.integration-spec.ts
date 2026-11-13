@@ -65,10 +65,15 @@ const guardianA = randomUUID();
 const guardianB = randomUUID();
 const linkA = randomUUID();
 const linkB = randomUUID();
+const membershipA1 = randomUUID();
+const membershipA2 = randomUUID();
+const membershipB1 = randomUUID();
+const profileA = randomUUID();
+const profileB = randomUUID();
 
 async function seed() {
   await query(
-    'TRUNCATE TABLE "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
   );
 
   const now = new Date().toISOString();
@@ -97,18 +102,28 @@ async function seed() {
     );
   }
 
-  for (const [userId, workspaceId, role] of [
-    [userA1, workspaceA, 'OWNER'],
-    [userA2, workspaceA, 'TEACHER'],
-    [userB1, workspaceB, 'OWNER'],
+  for (const [id, userId, workspaceId, role] of [
+    [membershipA1, userA1, workspaceA, 'OWNER'],
+    [membershipA2, userA2, workspaceA, 'TEACHER'],
+    [membershipB1, userB1, workspaceB, 'OWNER'],
   ] as const) {
     await query(
       `INSERT INTO "memberships"
          ("id", "user_id", "workspace_id", "role", "status", "created_at", "updated_at")
        VALUES ($1, $2, $3, $4, 'ACTIVE', $5, $5)`,
-      [randomUUID(), userId, workspaceId, role, now],
+      [id, userId, workspaceId, role, now],
     );
   }
+
+  await query(
+    `INSERT INTO "teacher_profiles"
+       ("id", "workspace_id", "membership_id", "qualifications", "specializations",
+        "created_at", "updated_at")
+     VALUES
+       ($1, $2, $3, 'B.Sc. Mathematics', ARRAY['Mathematics'], $5, $5),
+       ($4, $6, $7, 'B.A. English', ARRAY['English'], $5, $5)`,
+    [profileA, workspaceA, membershipA2, profileB, now, workspaceB, membershipB1],
+  );
 
   await query(
     `INSERT INTO "workspace_invitations"
@@ -169,12 +184,14 @@ describe('Row level security on tenant tables', () => {
       const students = await query('SELECT * FROM "students"');
       const guardians = await query('SELECT * FROM "guardians"');
       const links = await query('SELECT * FROM "student_guardians"');
+      const profiles = await query('SELECT * FROM "teacher_profiles"');
 
       expect(memberships.rowCount).toBe(0);
       expect(invitations.rowCount).toBe(0);
       expect(students.rowCount).toBe(0);
       expect(guardians.rowCount).toBe(0);
       expect(links.rowCount).toBe(0);
+      expect(profiles.rowCount).toBe(0);
     });
   });
 
@@ -187,6 +204,7 @@ describe('Row level security on tenant tables', () => {
       const students = await query('SELECT "id", "workspace_id" FROM "students"');
       const guardians = await query('SELECT "id", "workspace_id" FROM "guardians"');
       const links = await query('SELECT "id", "workspace_id" FROM "student_guardians"');
+      const profiles = await query('SELECT "id", "workspace_id" FROM "teacher_profiles"');
 
       expect(memberships.rowCount).toBe(2);
       expect(memberships.rows.every((row) => row.workspace_id === workspaceA)).toBe(true);
@@ -194,6 +212,7 @@ describe('Row level security on tenant tables', () => {
       expect(students.rows.map((row) => row.id)).toEqual([studentA]);
       expect(guardians.rows.map((row) => row.id)).toEqual([guardianA]);
       expect(links.rows.map((row) => row.id)).toEqual([linkA]);
+      expect(profiles.rows.map((row) => row.id)).toEqual([profileA]);
     });
   });
 
@@ -261,6 +280,19 @@ describe('Row level security on tenant tables', () => {
         ),
       ).rejects.toThrow(/row-level security policy/i);
     });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "teacher_profiles"
+             ("id", "workspace_id", "membership_id", "created_at", "updated_at")
+           VALUES ($1, $2, $3, now(), now())`,
+          [randomUUID(), workspaceB, membershipB1],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
   });
 
   it('cannot update or delete another tenant rows', async () => {
@@ -279,11 +311,20 @@ describe('Row level security on tenant tables', () => {
         [workspaceB],
       );
       const removeLinks = await query(`DELETE FROM "student_guardians" WHERE "id" = $1`, [linkB]);
+      const updateProfiles = await query(
+        `UPDATE "teacher_profiles" SET "qualifications" = 'Intruder' WHERE "workspace_id" = $1`,
+        [workspaceB],
+      );
+      const removeProfiles = await query(`DELETE FROM "teacher_profiles" WHERE "id" = $1`, [
+        profileB,
+      ]);
 
       expect(update.rowCount).toBe(0);
       expect(remove.rowCount).toBe(0);
       expect(updateGuardians.rowCount).toBe(0);
       expect(removeLinks.rowCount).toBe(0);
+      expect(updateProfiles.rowCount).toBe(0);
+      expect(removeProfiles.rowCount).toBe(0);
     });
   });
 
@@ -296,12 +337,14 @@ describe('Row level security on tenant tables', () => {
       const students = await query('SELECT "id" FROM "students"');
       const guardians = await query('SELECT "id" FROM "guardians"');
       const links = await query('SELECT "id" FROM "student_guardians"');
+      const profiles = await query('SELECT "id" FROM "teacher_profiles"');
 
       expect(memberships.rowCount).toBe(3);
       expect(invitations.rowCount).toBe(2);
       expect(students.rowCount).toBe(2);
       expect(guardians.rowCount).toBe(2);
       expect(links.rowCount).toBe(2);
+      expect(profiles.rowCount).toBe(2);
     });
   });
 
