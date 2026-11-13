@@ -39,6 +39,9 @@ export default async function WorkspacesPage() {
       studentsHref={
         data.activeWorkspaceId ? `/workspaces/${data.activeWorkspaceId}/students` : undefined
       }
+      classesHref={
+        data.activeWorkspaceId ? `/workspaces/${data.activeWorkspaceId}/classes` : undefined
+      }
     >
       <div className="mb-8">
         <p className="text-sm font-medium text-blue-600">Workspace management</p>

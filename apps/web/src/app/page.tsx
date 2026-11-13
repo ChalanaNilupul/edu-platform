@@ -31,5 +31,15 @@ export default async function HomePage() {
 
   const data = await response.json();
 
-  return <DashboardShell user={data.user} />;
+  return (
+    <DashboardShell
+      user={data.user}
+      studentsHref={
+        data.activeWorkspaceId ? `/workspaces/${data.activeWorkspaceId}/students` : undefined
+      }
+      classesHref={
+        data.activeWorkspaceId ? `/workspaces/${data.activeWorkspaceId}/classes` : undefined
+      }
+    />
+  );
 }

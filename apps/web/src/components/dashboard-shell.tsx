@@ -82,6 +82,12 @@ export function DashboardShell({
   classesHref,
   children,
 }: DashboardShellProps) {
+  const resolvedClassesHref =
+    classesHref ??
+    (studentsHref?.endsWith('/students')
+      ? `${studentsHref.slice(0, -'/students'.length)}/classes`
+      : undefined);
+
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
   const initials = fullName
     .split(' ')
@@ -126,7 +132,7 @@ export function DashboardShell({
                 item.label === 'Students'
                   ? studentsHref
                   : item.label === 'Classes'
-                    ? classesHref
+                    ? resolvedClassesHref
                     : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
