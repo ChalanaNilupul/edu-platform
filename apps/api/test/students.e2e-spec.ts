@@ -9,6 +9,7 @@ import { AuthService } from '../src/auth/auth.service.js';
 import { SessionAuthGuard } from '../src/auth/session-auth.guard.js';
 import { MembershipStatus, StudentStatus, WorkspaceRole } from '../src/generated/prisma/client.js';
 import { StudentsController } from '../src/students/students.controller.js';
+import { StudentsImportService } from '../src/students/students-import.service.js';
 import { StudentsService } from '../src/students/students.service.js';
 import { WorkspaceAccessService } from '../src/workspaces/workspace-access.service.js';
 import { WorkspaceRolesGuard } from '../src/workspaces/workspace-roles.guard.js';
@@ -48,6 +49,11 @@ describe('Students API (e2e)', () => {
     update: vi.fn(),
   };
 
+  const studentsImportService = {
+    validate: vi.fn(),
+    import: vi.fn(),
+  };
+
   const workspaceAccessService = {
     getActiveMembership: vi.fn(),
     requireRoles: vi.fn(),
@@ -65,6 +71,7 @@ describe('Students API (e2e)', () => {
         WorkspaceRolesGuard,
         { provide: AuthService, useValue: authService },
         { provide: StudentsService, useValue: studentsService },
+        { provide: StudentsImportService, useValue: studentsImportService },
         { provide: WorkspaceAccessService, useValue: workspaceAccessService },
       ],
     }).compile();
@@ -235,6 +242,86 @@ describe('Students API (e2e)', () => {
     expect(studentsService.update).toHaveBeenCalledWith(user.id, WORKSPACE_ID, STUDENT_ID, {
       status: StudentStatus.WITHDRAWN,
     });
+  });
+
+  it('validates a CSV import for a branch manager', async () => {
+    workspaceAccessService.getActiveMembership.mockResolvedValue(
+      activeMembership(WorkspaceRole.BRANCH_MANAGER),
+    );
+    const report = { totalRows: 1, validRows: 1, invalidRows: 0, duplicateRows: 0, rows: [] };
+    studentsImportService.validate.mockResolvedValueOnce(report);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/workspaces/${WORKSPACE_ID}/students/import/validate`)
+      .set('Cookie', 'edu_session=valid-session')
+      .send({ csv: 'first_name\nNimal\n' })
+      .expect(200)
+      .expect(report);
+
+    expect(studentsImportService.validate).toHaveBeenCalledWith(user.id, WORKSPACE_ID, {
+      csv: 'first_name\nNimal\n',
+    });
+  });
+
+  it('imports students for an admin', async () => {
+    workspaceAccessService.getActiveMembership.mockResolvedValue(
+      activeMembership(WorkspaceRole.ADMIN),
+    );
+    const result = { imported: 2, skipped: 0, duplicates: [] };
+    studentsImportService.import.mockResolvedValueOnce(result);
+
+    await request(app.getHttpServer())
+      .post(`/api/v1/workspaces/${WORKSPACE_ID}/students/import`)
+      .set('Cookie', 'edu_session=valid-session')
+      .send({ csv: 'first_name\nNimal\nKamal\n' })
+      .expect(200)
+      .expect(result);
+
+    expect(studentsImportService.import).toHaveBeenCalledWith(user.id, WORKSPACE_ID, {
+      csv: 'first_name\nNimal\nKamal\n',
+    });
+  });
+
+  it('forbids teachers from validating or importing students', async () => {
+    workspaceAccessService.getActiveMembership.mockResolvedValue(
+      activeMembership(WorkspaceRole.TEACHER),
+    );
+
+    for (const path of ['import/validate', 'import']) {
+      await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${WORKSPACE_ID}/students/${path}`)
+        .set('Cookie', 'edu_session=valid-session')
+        .send({ csv: 'first_name\nNimal\n' })
+        .expect(403);
+    }
+
+    expect(studentsImportService.validate).not.toHaveBeenCalled();
+    expect(studentsImportService.import).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty or malformed CSV payload', async () => {
+    workspaceAccessService.getActiveMembership.mockResolvedValue(
+      activeMembership(WorkspaceRole.ADMIN),
+    );
+
+    for (const body of [{}, { csv: '' }, { csv: 42 }, { csv: 'first_name\nNimal\n', extra: 'x' }]) {
+      await request(app.getHttpServer())
+        .post(`/api/v1/workspaces/${WORKSPACE_ID}/students/import/validate`)
+        .set('Cookie', 'edu_session=valid-session')
+        .send(body)
+        .expect(400);
+    }
+
+    expect(studentsImportService.validate).not.toHaveBeenCalled();
+  });
+
+  it('requires a session to validate imports', async () => {
+    await request(app.getHttpServer())
+      .post(`/api/v1/workspaces/${WORKSPACE_ID}/students/import/validate`)
+      .send({ csv: 'first_name\nNimal\n' })
+      .expect(401);
+
+    expect(studentsImportService.validate).not.toHaveBeenCalled();
   });
 
   it('rejects an invalid student ID', async () => {

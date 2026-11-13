@@ -21,14 +21,19 @@ import { WorkspaceRole } from '../generated/prisma/client.js';
 import { WorkspaceRoles } from '../workspaces/workspace-roles.decorator.js';
 import { WorkspaceRolesGuard } from '../workspaces/workspace-roles.guard.js';
 import { CreateStudentDto } from './dto/create-student.dto.js';
+import { ImportStudentsDto } from './dto/import-students.dto.js';
 import { ListStudentsQueryDto } from './dto/list-students.query.js';
 import { UpdateStudentDto } from './dto/update-student.dto.js';
+import { StudentsImportService } from './students-import.service.js';
 import { StudentsService } from './students.service.js';
 
 @Controller('workspaces/:workspaceId/students')
 @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)
 export class StudentsController {
-  constructor(@Inject(StudentsService) private readonly studentsService: StudentsService) {}
+  constructor(
+    @Inject(StudentsService) private readonly studentsService: StudentsService,
+    @Inject(StudentsImportService) private readonly studentsImportService: StudentsImportService,
+  ) {}
 
   @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)
   @Get()
@@ -49,6 +54,28 @@ export class StudentsController {
     @Param('studentId', ParseUUIDPipe) studentId: string,
   ) {
     return this.studentsService.findOne(user.id, workspaceId, studentId);
+  }
+
+  @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER)
+  @Post('import/validate')
+  @HttpCode(HttpStatus.OK)
+  validateImport(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Body(new ValidationPipe({ expectedType: ImportStudentsDto })) dto: ImportStudentsDto,
+  ) {
+    return this.studentsImportService.validate(user.id, workspaceId, dto);
+  }
+
+  @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER)
+  @Post('import')
+  @HttpCode(HttpStatus.OK)
+  import(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Body(new ValidationPipe({ expectedType: ImportStudentsDto })) dto: ImportStudentsDto,
+  ) {
+    return this.studentsImportService.import(user.id, workspaceId, dto);
   }
 
   @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER)

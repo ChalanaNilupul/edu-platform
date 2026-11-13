@@ -75,6 +75,7 @@ enum AuditEventType {
   GUARDIAN_UPDATED
   GUARDIAN_UNLINKED
   GUARDIAN_DELETED
+  STUDENTS_IMPORTED
 }
 
 model User {
@@ -87,12 +88,12 @@ model User {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  memberships            Membership[]
-  sessions               Session[]
-  invitationsSent        WorkspaceInvitation[]    @relation("InvitationInvitedBy")
-  invitationsAccepted    WorkspaceInvitation[]    @relation("InvitationAcceptedBy")
+  memberships             Membership[]
+  sessions                Session[]
+  invitationsSent         WorkspaceInvitation[]    @relation("InvitationInvitedBy")
+  invitationsAccepted     WorkspaceInvitation[]    @relation("InvitationAcceptedBy")
   emailVerificationTokens EmailVerificationToken[]
-  passwordResetTokens    PasswordResetToken[]
+  passwordResetTokens     PasswordResetToken[]
 
   @@map("users")
 }
@@ -146,21 +147,21 @@ model Student {
 }
 
 model Guardian {
-  id            String               @id @default(uuid())
-  workspaceId   String               @map("workspace_id")
-  firstName     String               @map("first_name")
-  lastName      String?              @map("last_name")
-  relationship  GuardianRelationship
-  email         String?
-  phone         String?
-  occupation    String?
-  addressLine1  String?              @map("address_line1")
-  addressLine2  String?              @map("address_line2")
-  city          String?
-  district      String?
-  postalCode    String?              @map("postal_code")
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
+  id           String               @id @default(uuid())
+  workspaceId  String               @map("workspace_id")
+  firstName    String               @map("first_name")
+  lastName     String?              @map("last_name")
+  relationship GuardianRelationship
+  email        String?
+  phone        String?
+  occupation   String?
+  addressLine1 String?              @map("address_line1")
+  addressLine2 String?              @map("address_line2")
+  city         String?
+  district     String?
+  postalCode   String?              @map("postal_code")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
 
   workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   students  StudentGuardian[]
