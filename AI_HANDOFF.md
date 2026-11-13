@@ -17,9 +17,11 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 3 Batch 2 is implemented: workspace-scoped guardians with `StudentGuardian` links, a guardians REST module, primary-contact handling, audit events, and a Guardians card with add/edit/remove pages on the student detail screen.
 - Phase 3 Batch 3 is implemented: preview-first CSV student import with a hand-written RFC 4180 parser, validate/import endpoints, duplicate skipping, a `STUDENTS_IMPORTED` audit event, and a role-aware import page.
 - Phase 3 Batch 4 is implemented: workspace-scoped classes and append-only enrollment history, with capacity/archive rules, roster and student-class views, audit events, and a role-aware classes UI.
-- Verified by 178 unit tests, 75 mocked HTTP E2E tests, 54 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of the student directory, guardian links, CSV import, classes and enrollment.
-- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian reuse across students, teacher assignment/timetables for classes, and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API) and `2ede95d` (CSV import page) were pushed on `feat/phase-3-student-profiles`; the classes/enrollment batch on the same branch is not committed yet.
+- Email-verification enforcement (security review finding M1) is implemented: workspace creation and invitation creation require `emailVerifiedAt` and return a 403 with a clear message otherwise; login and workspace switching stay open. Unverified users see a dashboard banner offering a resend.
+- Runtime verification of rate limiting and Origin/CSRF checking is complete (November 13, 2026): the global 30 req/60s cap and the auth-route 5/min and 3/min limits return 429; unsafe requests with a foreign or missing Origin are rejected with 403; spoofed `X-Forwarded-For` does not reset the limit while `TRUST_PROXY=false`.
+- Verified by 180 unit tests, 75 mocked HTTP E2E tests, 56 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, and the unverified-email banner plus blocked workspace creation.
+- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; teacher assignment/timetables for classes; the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav) and `c45a009` (nav docs) were pushed on `feat/phase-3-student-profiles`; the email-verification enforcement batch on top of them is not committed yet.
 
 ---
 
@@ -547,9 +549,9 @@ Do not claim unverified checks are complete.
 
 ## Authentication Security
 
-- Verify rate limiting at runtime (configure `TRUST_PROXY` for the deployment topology first).
-- Verify Origin checking at runtime.
-- Enforce email verification before workspace actions (security review finding M1). Invitation acceptance now requires a verified email; workspace creation and other actions still allow unverified users.
+- ~~Verify rate limiting at runtime (configure `TRUST_PROXY` for the deployment topology first).~~ Done November 13, 2026: the global 30 req/60s cap and the per-route 5/min (login, register) and 3/min (resend, forgot, reset) limits return 429. A spoofed `X-Forwarded-For` is ignored while `TRUST_PROXY=false`, so it cannot reset the counter.
+- ~~Verify Origin checking at runtime.~~ Done November 13, 2026: unsafe methods with a foreign or missing Origin/Referer and a session cookie return 403 "Forbidden origin"/"Missing request origin"; a foreign preflight receives 204 carrying the configured allow-origin header, so the browser still blocks the real request.
+- Email verification enforcement (M1): workspace creation and invitation creation now require a verified email. Login, workspace switching, and the student/guardian/class/enrollment routes still allow unverified users; revisit only if the product decides to gate more actions.
 - ~~Add structured audit logging for security events such as failed logins, role changes and invitation changes (finding M4).~~ Implemented — see "Audit logging (M4)" below.
 - M4 follow-ups if needed: an admin-facing read/view of `audit_events`, retention policy, and auditing other sensitive actions as they are added.
 - Longer-term: stronger CSRF token scheme if the app adds cross-site embedding.
@@ -567,6 +569,14 @@ Implemented already: email verification, password reset, Origin/Referer enforcem
 - No read API yet. Query the table directly until an admin-facing viewer exists.
 - Database role: the setup script grants on all current tables and also sets `ALTER DEFAULT PRIVILEGES`, so tables created later by the migration role inherit the grants automatically. Re-run `pnpm db:setup-app-role` only when the role is missing, `DATABASE_APP_URL` changes, or migrations are applied by a different database user.
 - `pnpm --filter @edu-platform/api db:sync` runs `prisma generate`, `prisma migrate deploy` and the role setup in one idempotent step, skipping the role step when `DATABASE_APP_URL` is unset.
+
+### Email verification enforcement (M1)
+
+- Enforcement points (`November 13, 2026`): `WorkspacesService.create` and `InvitationsService.create` throw `ForbiddenException` with "Verify your email address before creating a workspace" / "…before inviting members" when `emailVerifiedAt` is null. `SessionAuthGuard` already loads `emailVerifiedAt` through `AuthService.getCurrentSession`, so no extra query was added.
+- Deliberately not gated: login, workspace switching, and all student/guardian/class/enrollment routes. Invitation acceptance was already gated in Phase 2.
+- API contract change: `POST /workspaces` and `POST /workspaces/:workspaceId/invitations` now return 403 for unverified sessions. Unit, mocked E2E and real-database integration tests cover both directions (blocked before verification, allowed after).
+- Web: `DashboardShell` renders `EmailVerificationBanner` for sessions without `emailVerifiedAt`. The banner explains the restriction and posts to the existing session-authenticated `POST /auth/email/resend`, with "Sending…"/"Email sent" states. It disappears once the session reports a verified email.
+- A stale `UpdateEnrollmentDto.notes` type (`string` instead of `string | null`) was corrected so the API typecheck matched the runtime clearing behavior.
 
 ## Workspace Management
 
@@ -818,12 +828,12 @@ Do not prioritize these before the core product is working:
 
 Follow this order:
 
-1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
-2. Verify rate limiting and Origin checking at runtime.
-3. Decide whether to extend email-verification enforcement beyond invitation acceptance.
-4. Continue Phase 3 — remaining student-management polish (bulk enrollment/import and guardian reuse), or move to Phase 4 teacher management after that.
+1. Finish manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset.
+2. ~~Verify rate limiting and Origin checking at runtime.~~ Done November 13, 2026 — see §11.
+3. ~~Decide whether to extend email-verification enforcement beyond invitation acceptance.~~ Done November 13, 2026 — enforced for workspace creation and invitations; login and workspace switching stay open.
+4. Move to Phase 4 teacher management, or pick the remaining Phase 3 polish (guardian reuse across siblings) first.
 
-Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role, audit logging and the Phase 2 security review are in place; browser verification, runtime security checks and the email-verification scope decision remain open.
+The Phase 2 runtime security checks and the M1 scope decision are now closed. What remains before Phase 4 is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred Phase 3 polish (guardian reuse, teacher assignment for classes).
 
 # 17. Development Rules for AI Assistance
 

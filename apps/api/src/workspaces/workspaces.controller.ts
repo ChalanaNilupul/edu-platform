@@ -43,7 +43,7 @@ export class WorkspacesController {
     @CurrentSessionId() sessionId: string,
     @Body(new ValidationPipe({ expectedType: CreateWorkspaceDto })) dto: CreateWorkspaceDto,
   ) {
-    return this.workspacesService.create(user.id, sessionId, dto);
+    return this.workspacesService.create(user.id, user.emailVerifiedAt, sessionId, dto);
   }
 
   @UseGuards(SessionAuthGuard)
@@ -124,7 +124,13 @@ export class WorkspacesController {
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body(new ValidationPipe({ expectedType: InviteMemberDto })) dto: InviteMemberDto,
   ) {
-    return this.invitationsService.create(user.id, workspaceId, dto.email, dto.role);
+    return this.invitationsService.create(
+      user.id,
+      user.emailVerifiedAt,
+      workspaceId,
+      dto.email,
+      dto.role,
+    );
   }
 
   @UseGuards(SessionAuthGuard, WorkspaceRolesGuard)

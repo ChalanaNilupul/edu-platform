@@ -18,5 +18,5 @@ export class UpdateEnrollmentDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  notes?: string;
+  notes?: string | null;
 }

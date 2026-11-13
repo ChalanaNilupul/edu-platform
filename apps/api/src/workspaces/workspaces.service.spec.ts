@@ -95,7 +95,7 @@ describe('WorkspacesService', () => {
       type: WorkspaceType.TEACHER,
     };
 
-    const result = await service.create(userId, 'session-123', dto);
+    const result = await service.create(userId, new Date(), 'session-123', dto);
 
     expect(prismaMock.$transaction).toHaveBeenCalledOnce();
 
@@ -139,6 +139,19 @@ describe('WorkspacesService', () => {
     });
   });
 
+  it('rejects workspace creation for an unverified email address', async () => {
+    const dto: CreateWorkspaceDto = {
+      name: 'My Tuition Class',
+      type: WorkspaceType.TEACHER,
+    };
+
+    await expect(service.create('user-123', null, 'session-123', dto)).rejects.toThrow(
+      'Verify your email address before creating a workspace',
+    );
+
+    expect(prismaMock.$transaction).not.toHaveBeenCalled();
+  });
+
   it('rejects workspace creation when the session is no longer valid', async () => {
     tx.session.updateMany.mockResolvedValue({
       count: 0,
@@ -149,7 +162,7 @@ describe('WorkspacesService', () => {
       type: WorkspaceType.TEACHER,
     };
 
-    await expect(service.create('user-123', 'session-123', dto)).rejects.toThrow(
+    await expect(service.create('user-123', new Date(), 'session-123', dto)).rejects.toThrow(
       ForbiddenException,
     );
   });

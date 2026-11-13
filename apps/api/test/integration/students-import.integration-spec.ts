@@ -6,6 +6,7 @@ import {
   createWorkspace,
   post,
   registerAndLogin,
+  registerVerifiedUser,
   truncateAll,
   verifyEmail,
 } from './helpers.js';
@@ -66,7 +67,7 @@ describe('Student import integration', () => {
   }
 
   it('validates, imports and reports duplicates without touching existing students', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
 
     const validation = await post(
@@ -151,7 +152,7 @@ describe('Student import integration', () => {
   });
 
   it('blocks the import while any row is invalid', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
 
     const csv = ['first_name,email', 'Nimal,not-an-email'].join('\n');
@@ -184,7 +185,7 @@ describe('Student import integration', () => {
   });
 
   it('keeps imports scoped to the workspace', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const first = await createWorkspace(owner.client, 'First');
     const second = await createWorkspace(owner.client, 'Second');
 
@@ -210,7 +211,7 @@ describe('Student import integration', () => {
   });
 
   it('rejects malformed CSV structure with a clear error', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
 
     const unknownColumn = await post(
@@ -231,7 +232,7 @@ describe('Student import integration', () => {
   });
 
   it('forbids teachers from importing', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const teacher = await addTeacher(owner.client, workspace.id, 'teacher@example.com');
 
@@ -250,7 +251,7 @@ describe('Student import integration', () => {
   });
 
   it('rejects outsiders and unauthenticated callers', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
     const outsider = await registerAndLogin(context, 'outsider@example.com');
 

@@ -122,6 +122,7 @@ describe('Workspaces API (e2e)', () => {
 
     expect(workspacesService.create).toHaveBeenCalledWith(
       user.id,
+      user.emailVerifiedAt,
       'session-123',
       expect.objectContaining({
         name: 'My Tuition Class',
@@ -151,6 +152,7 @@ describe('Workspaces API (e2e)', () => {
 
     expect(workspacesService.create).toHaveBeenCalledWith(
       user.id,
+      user.emailVerifiedAt,
       'session-123',
       expect.objectContaining({
         name: 'My Institute',
@@ -375,6 +377,7 @@ describe('Workspaces API (e2e)', () => {
 
       expect(invitationsService.create).toHaveBeenCalledWith(
         user.id,
+        user.emailVerifiedAt,
         workspaceId,
         'new@example.com',
         WorkspaceRole.TEACHER,

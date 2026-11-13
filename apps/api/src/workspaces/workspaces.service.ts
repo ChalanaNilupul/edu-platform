@@ -16,7 +16,16 @@ export class WorkspacesService {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  async create(userId: string, sessionId: string, dto: CreateWorkspaceDto) {
+  async create(
+    userId: string,
+    emailVerifiedAt: Date | null,
+    sessionId: string,
+    dto: CreateWorkspaceDto,
+  ) {
+    if (!emailVerifiedAt) {
+      throw new ForbiddenException('Verify your email address before creating a workspace');
+    }
+
     const created = await this.prisma.$transaction(async (tx) => {
       const workspace = await tx.workspace.create({
         data: {

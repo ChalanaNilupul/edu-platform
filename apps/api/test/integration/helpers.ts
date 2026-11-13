@@ -102,6 +102,14 @@ export async function registerAndLogin(context: TestContext, email: string) {
   return { client, user: login.body.user as { id: string; email: string } };
 }
 
+export async function registerVerifiedUser(context: TestContext, email: string) {
+  const registered = await registerAndLogin(context, email);
+
+  await verifyEmail(context, registered.client, email);
+
+  return registered;
+}
+
 export async function verifyEmail(
   context: TestContext,
   client: ReturnType<typeof createAgent>,

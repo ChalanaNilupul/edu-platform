@@ -7,6 +7,7 @@ import {
   patch,
   post,
   registerAndLogin,
+  registerVerifiedUser,
   truncateAll,
   verifyEmail,
 } from './helpers.js';
@@ -77,7 +78,7 @@ describe('Student management integration', () => {
   }
 
   it('creates students and lists them with search, filtering and pagination', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
 
     const nimal = await createStudent(owner.client, workspace.id, {
@@ -158,7 +159,7 @@ describe('Student management integration', () => {
   });
 
   it('rejects duplicate student codes and invalid student data', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
 
     await createStudent(owner.client, workspace.id, {
@@ -188,7 +189,7 @@ describe('Student management integration', () => {
   });
 
   it('lets teachers read students but not change them', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const teacher = await addTeacher(owner.client, workspace.id, 'teacher@example.com');
 
@@ -223,7 +224,7 @@ describe('Student management integration', () => {
   });
 
   it('isolates student records between workspaces and from outsiders', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const first = await createWorkspace(owner.client, 'First');
     const second = await createWorkspace(owner.client, 'Second');
     const outsider = await registerAndLogin(context, 'outsider@example.com');
@@ -262,7 +263,7 @@ describe('Student management integration', () => {
   });
 
   it('updates profile fields and status, recording the changes', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
     const student = await createStudent(owner.client, workspace.id, {
       firstName: 'Nimal',

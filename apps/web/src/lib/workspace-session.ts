@@ -8,6 +8,7 @@ export type SessionUser = {
   firstName: string;
   lastName: string | null;
   email: string;
+  emailVerifiedAt: string | null;
 };
 
 export type WorkspaceSummary = {

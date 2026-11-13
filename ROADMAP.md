@@ -118,6 +118,7 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Implement workspace invitations.
 - [x] Implement invitation acceptance.
 - [x] Require a verified email address before accepting an invitation.
+- [x] Require a verified email address before creating a workspace and inviting members.
 - [x] Implement invitation expiration (7-day TTL, `EXPIRED` status).
 - [x] Implement membership management.
 - [x] Implement member removal.
@@ -216,6 +217,18 @@ Implemented finding M4 as a database-backed security trail:
 - Runtime role needs the new table: run `pnpm db:setup-app-role` after `pnpm exec prisma migrate deploy`.
 
 Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration tests, typecheck, lint, format and builds.
+
+### Runtime security verification and email-verification enforcement (November 13, 2026)
+
+Closed the remaining Phase 2 verification items and finding M1.
+
+- Rate limiting verified at runtime: the global 30 req/60s cap trips with 429, and the tighter auth limits (5/min login and register, 3/min resend/forgot/reset) trip independently. With `TRUST_PROXY=false` a spoofed `X-Forwarded-For` does not reset the limit.
+- Origin/CSRF checks verified at runtime: unsafe methods with a foreign or missing Origin/Referer and a session cookie return 403 ("Forbidden origin" / "Missing request origin"). A foreign preflight returns 204 with the configured allow-origin header, so the browser blocks the real request; note the preflight header is static, not an echo of the caller's origin.
+- Email-verification enforcement: workspace creation and invitation creation now require a verified email (`ForbiddenException`, 403) in `WorkspacesService.create` and `InvitationsService.create`. Login, workspace switching and the student/guardian/class/enrollment routes remain open to unverified users by design.
+- Web: unverified sessions get an amber dashboard banner explaining the restriction with a session-authenticated "Resend email" action (existing `POST /auth/email/resend`); the banner disappears after verification.
+- Tests updated/added across unit, mocked HTTP and real-database integration suites, using a new `registerVerifiedUser` integration helper. Also corrected `UpdateEnrollmentDto.notes` to `string | null` to match the runtime clear behavior.
+
+Verified: 180 unit tests, 75 mocked HTTP E2E tests, 56 real-database integration tests, typecheck, lint, format, API build, `next build`, and a browser walkthrough (unverified login → banner → resend → blocked workspace creation → verify → banner gone → workspace created).
 
 # Phase 3 — Student Management
 

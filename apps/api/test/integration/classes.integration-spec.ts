@@ -8,6 +8,7 @@ import {
   patch,
   post,
   registerAndLogin,
+  registerVerifiedUser,
   truncateAll,
   verifyEmail,
 } from './helpers.js';
@@ -83,7 +84,7 @@ describe('Classes and enrollments integration', () => {
   }
 
   it('creates classes, enrolls students and reports roster and history', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
 
     const schoolClass = await createClass(owner.client, workspace.id, {
@@ -166,7 +167,7 @@ describe('Classes and enrollments integration', () => {
   });
 
   it('blocks duplicate active enrollment, keeps history and allows re-enrollment', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const schoolClass = await createClass(owner.client, workspace.id);
     const student = await createStudent(owner.client, workspace.id, 'Nimal');
@@ -222,7 +223,7 @@ describe('Classes and enrollments integration', () => {
   });
 
   it('enforces capacity and refuses enrollment into an archived class', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const schoolClass = await createClass(owner.client, workspace.id, { capacity: 1 });
     const nimal = await createStudent(owner.client, workspace.id, 'Nimal');
@@ -261,7 +262,7 @@ describe('Classes and enrollments integration', () => {
   });
 
   it('refuses to delete a class with enrollment records', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const schoolClass = await createClass(owner.client, workspace.id);
     const student = await createStudent(owner.client, workspace.id, 'Nimal');
@@ -297,7 +298,7 @@ describe('Classes and enrollments integration', () => {
   });
 
   it('lets teachers read classes and rosters but not change them', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const schoolClass = await createClass(owner.client, workspace.id);
     const student = await createStudent(owner.client, workspace.id, 'Nimal');
@@ -342,11 +343,11 @@ describe('Classes and enrollments integration', () => {
   });
 
   it('isolates classes and students between workspaces', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const student = await createStudent(owner.client, workspace.id, 'Nimal');
 
-    const outsider = await registerAndLogin(context, 'outsider@example.com');
+    const outsider = await registerVerifiedUser(context, 'outsider@example.com');
     const otherWorkspace = await createWorkspace(outsider.client, 'Other Institute', 'INSTITUTE');
     const otherClass = await createClass(outsider.client, otherWorkspace.id, {
       name: 'Other Class',
@@ -381,7 +382,7 @@ describe('Classes and enrollments integration', () => {
   });
 
   it('rejects invalid class and enrollment data', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const schoolClass = await createClass(owner.client, workspace.id);
     const student = await createStudent(owner.client, workspace.id, 'Nimal');

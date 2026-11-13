@@ -108,6 +108,7 @@ describe('InvitationsService', () => {
 
       const result = await service.create(
         'actor-123',
+        new Date(),
         'workspace-123',
         ' NEW@EXAMPLE.COM ',
         WorkspaceRole.TEACHER,
@@ -142,9 +143,30 @@ describe('InvitationsService', () => {
       });
     });
 
+    it('rejects invitations from an unverified account', async () => {
+      await expect(
+        service.create(
+          'actor-123',
+          null,
+          'workspace-123',
+          'new@example.com',
+          WorkspaceRole.TEACHER,
+        ),
+      ).rejects.toThrow('Verify your email address before inviting members');
+
+      expect(workspaceAccessMock.requireRoles).not.toHaveBeenCalled();
+      expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
+    });
+
     it('rejects inviting a workspace owner', async () => {
       await expect(
-        service.create('actor-123', 'workspace-123', 'new@example.com', WorkspaceRole.OWNER),
+        service.create(
+          'actor-123',
+          new Date(),
+          'workspace-123',
+          'new@example.com',
+          WorkspaceRole.OWNER,
+        ),
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
@@ -158,7 +180,13 @@ describe('InvitationsService', () => {
       });
 
       await expect(
-        service.create('actor-123', 'workspace-123', 'new@example.com', WorkspaceRole.ADMIN),
+        service.create(
+          'actor-123',
+          new Date(),
+          'workspace-123',
+          'new@example.com',
+          WorkspaceRole.ADMIN,
+        ),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
@@ -179,7 +207,13 @@ describe('InvitationsService', () => {
         createdAt: new Date(),
       });
 
-      await service.create('actor-123', 'workspace-123', 'admin@example.com', WorkspaceRole.ADMIN);
+      await service.create(
+        'actor-123',
+        new Date(),
+        'workspace-123',
+        'admin@example.com',
+        WorkspaceRole.ADMIN,
+      );
 
       expect(tx.workspaceInvitation.upsert).toHaveBeenCalledOnce();
     });
@@ -188,7 +222,13 @@ describe('InvitationsService', () => {
       tx.membership.findFirst.mockResolvedValue({ id: 'membership-123' });
 
       await expect(
-        service.create('actor-123', 'workspace-123', 'member@example.com', WorkspaceRole.TEACHER),
+        service.create(
+          'actor-123',
+          new Date(),
+          'workspace-123',
+          'member@example.com',
+          WorkspaceRole.TEACHER,
+        ),
       ).rejects.toBeInstanceOf(ConflictException);
 
       expect(tx.workspaceInvitation.upsert).not.toHaveBeenCalled();
@@ -207,6 +247,7 @@ describe('InvitationsService', () => {
 
       const result = await service.create(
         'actor-123',
+        new Date(),
         'workspace-123',
         'new@example.com',
         WorkspaceRole.TEACHER,

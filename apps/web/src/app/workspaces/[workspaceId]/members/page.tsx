@@ -16,6 +16,7 @@ type SessionUser = {
   firstName: string;
   lastName: string | null;
   email: string;
+  emailVerifiedAt: string | null;
 };
 
 type WorkspaceResponse = {

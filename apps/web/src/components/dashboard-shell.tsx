@@ -16,6 +16,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import { LogoutButton } from './logout-button';
+import { EmailVerificationBanner } from './email-verification-banner';
 
 const navigation = [
   { label: 'Dashboard', icon: LayoutDashboard, href: '/' },
@@ -65,6 +66,7 @@ type DashboardUser = {
   firstName: string;
   lastName: string | null;
   email: string;
+  emailVerifiedAt: string | null;
 };
 
 type DashboardShellProps = {
@@ -212,6 +214,8 @@ export function DashboardShell({
         </header>
 
         <main className="mx-auto max-w-7xl p-5 sm:p-8">
+          {user.emailVerifiedAt ? null : <EmailVerificationBanner />}
+
           {children ?? (
             <>
               <div className="mb-8">

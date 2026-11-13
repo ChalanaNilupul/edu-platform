@@ -33,7 +33,17 @@ export class InvitationsService {
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
-  async create(actorId: string, workspaceId: string, emailInput: string, role: WorkspaceRole) {
+  async create(
+    actorId: string,
+    emailVerifiedAt: Date | null,
+    workspaceId: string,
+    emailInput: string,
+    role: WorkspaceRole,
+  ) {
+    if (!emailVerifiedAt) {
+      throw new ForbiddenException('Verify your email address before inviting members');
+    }
+
     const email = emailInput.trim().toLowerCase();
 
     const invitation = await this.tenant.runAsTenant(workspaceId, async (tx) => {

@@ -9,6 +9,7 @@ import {
   patch,
   post,
   registerAndLogin,
+  registerVerifiedUser,
   truncateAll,
   verifyEmail,
 } from './helpers.js';
@@ -174,7 +175,7 @@ describe('EduPlatform database integration', () => {
 
   describe('workspaces', () => {
     it('creates a workspace with an owner membership and activates it', async () => {
-      const { client, user } = await registerAndLogin(context, 'owner@example.com');
+      const { client, user } = await registerVerifiedUser(context, 'owner@example.com');
       const workspace = await createWorkspace(client, 'Colombo Maths');
 
       expect(workspace.role).toBe('OWNER');
@@ -197,7 +198,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('switches between workspaces and restores the active workspace from the session', async () => {
-      const { client } = await registerAndLogin(context, 'owner@example.com');
+      const { client } = await registerVerifiedUser(context, 'owner@example.com');
       const first = await createWorkspace(client, 'First');
       const second = await createWorkspace(client, 'Second');
 
@@ -209,8 +210,41 @@ describe('EduPlatform database integration', () => {
       expect((await client.get('/api/v1/auth/me')).body.activeWorkspaceId).toBe(first.id);
     });
 
+    it('requires a verified email address to create a workspace', async () => {
+      const { client } = await registerAndLogin(context, 'owner@example.com');
+
+      const blocked = await post(client, '/workspaces').send({ name: 'Blocked', type: 'TEACHER' });
+
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.message).toBe('Verify your email address before creating a workspace');
+
+      await verifyEmail(context, client, 'owner@example.com');
+
+      const allowed = await post(client, '/workspaces').send({ name: 'Allowed', type: 'TEACHER' });
+
+      expect(allowed.status).toBe(201);
+    });
+
+    it('requires a verified email address to invite members', async () => {
+      const { client } = await registerVerifiedUser(context, 'owner@example.com');
+      const workspace = await createWorkspace(client, 'Institute', 'INSTITUTE');
+
+      await context.prisma.user.update({
+        where: { email: 'owner@example.com' },
+        data: { emailVerifiedAt: null },
+      });
+
+      const blocked = await post(client, `/workspaces/${workspace.id}/invitations`).send({
+        email: 'member@example.com',
+        role: 'TEACHER',
+      });
+
+      expect(blocked.status).toBe(403);
+      expect(blocked.body.message).toBe('Verify your email address before inviting members');
+    });
+
     it('refuses to switch to a workspace the user does not belong to', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const outsider = await registerAndLogin(context, 'outsider@example.com');
       const workspace = await createWorkspace(owner.client, 'Private');
 
@@ -220,7 +254,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('prevents cross-tenant workspace, member and invitation access', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const outsider = await registerAndLogin(context, 'outsider@example.com');
       const workspace = await createWorkspace(owner.client, 'Private');
 
@@ -236,7 +270,7 @@ describe('EduPlatform database integration', () => {
 
   describe('invitations and memberships', () => {
     it('accepts an invitation, creates the membership and activates the workspace', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
       await verifyEmail(context, member.client, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
@@ -283,7 +317,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('rejects acceptance from a different email address', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const other = await registerAndLogin(context, 'other@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
@@ -301,7 +335,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('refuses acceptance until the email address is verified', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
@@ -335,7 +369,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('allows the owner, but not an admin, to invite an administrator', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const admin = await registerAndLogin(context, 'admin@example.com');
       await verifyEmail(context, admin.client, 'admin@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
@@ -372,7 +406,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('lets the owner change a member role and remove the member', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
       await verifyEmail(context, member.client, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
@@ -432,7 +466,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('blocks teachers from listing members and invitations', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const teacher = await registerAndLogin(context, 'teacher@example.com');
       await verifyEmail(context, teacher.client, 'teacher@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
@@ -455,7 +489,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('rejects duplicate invitations for an existing member', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
       await verifyEmail(context, member.client, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
@@ -478,7 +512,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('revokes an invitation and blocks its acceptance', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 
@@ -509,7 +543,7 @@ describe('EduPlatform database integration', () => {
     });
 
     it('expires an invitation and refuses acceptance', async () => {
-      const owner = await registerAndLogin(context, 'owner@example.com');
+      const owner = await registerVerifiedUser(context, 'owner@example.com');
       const member = await registerAndLogin(context, 'member@example.com');
       const workspace = await createWorkspace(owner.client, 'Institute');
 

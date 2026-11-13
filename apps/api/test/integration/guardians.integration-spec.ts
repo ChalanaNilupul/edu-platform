@@ -8,6 +8,7 @@ import {
   patch,
   post,
   registerAndLogin,
+  registerVerifiedUser,
   truncateAll,
   verifyEmail,
 } from './helpers.js';
@@ -105,7 +106,7 @@ describe('Guardian management integration', () => {
   }
 
   it('creates guardians, keeps one primary contact and lists them for the student', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const student = await createStudent(owner.client, workspace.id);
 
@@ -156,7 +157,7 @@ describe('Guardian management integration', () => {
   });
 
   it('updates guardian details and records only the changed fields', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
     const student = await createStudent(owner.client, workspace.id);
     const link = await createGuardian(owner.client, workspace.id, student.id, {
@@ -205,7 +206,7 @@ describe('Guardian management integration', () => {
   });
 
   it('unlinks a guardian before allowing the record to be deleted', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
     const student = await createStudent(owner.client, workspace.id);
     const link = await createGuardian(owner.client, workspace.id, student.id, {
@@ -259,7 +260,7 @@ describe('Guardian management integration', () => {
   });
 
   it('lets teachers read guardians but not change them', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
     const teacher = await addTeacher(owner.client, workspace.id, 'teacher@example.com');
     const student = await createStudent(owner.client, workspace.id);
@@ -311,7 +312,7 @@ describe('Guardian management integration', () => {
   });
 
   it('isolates guardian records between workspaces and from outsiders', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const first = await createWorkspace(owner.client, 'First');
     const second = await createWorkspace(owner.client, 'Second');
     const outsider = await registerAndLogin(context, 'outsider@example.com');
@@ -362,7 +363,7 @@ describe('Guardian management integration', () => {
   });
 
   it('rejects invalid guardian data and unknown relationships', async () => {
-    const owner = await registerAndLogin(context, 'owner@example.com');
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute');
     const student = await createStudent(owner.client, workspace.id);
 
