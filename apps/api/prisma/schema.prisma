@@ -53,6 +53,17 @@ enum GuardianRelationship {
   OTHER
 }
 
+enum ClassStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  WITHDRAWN
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -76,6 +87,11 @@ enum AuditEventType {
   GUARDIAN_UNLINKED
   GUARDIAN_DELETED
   STUDENTS_IMPORTED
+  CLASS_CREATED
+  CLASS_UPDATED
+  CLASS_DELETED
+  STUDENT_ENROLLED
+  ENROLLMENT_UPDATED
 }
 
 model User {
@@ -110,6 +126,8 @@ model Workspace {
   students         Student[]
   guardians        Guardian[]
   studentGuardians StudentGuardian[]
+  classes          Class[]
+  enrollments      Enrollment[]
   activeSessions   Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -138,7 +156,8 @@ model Student {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  guardians StudentGuardian[]
+  guardians   StudentGuardian[]
+  enrollments Enrollment[]
 
   @@unique([workspaceId, studentCode])
   @@index([workspaceId, status])
@@ -187,6 +206,48 @@ model StudentGuardian {
   @@index([workspaceId])
   @@index([guardianId])
   @@map("student_guardians")
+}
+
+model Class {
+  id          String      @id @default(uuid())
+  workspaceId String      @map("workspace_id")
+  name        String
+  grade       String?
+  description String?
+  capacity    Int?
+  status      ClassStatus @default(ACTIVE)
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enrollments Enrollment[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId, status])
+  @@map("classes")
+}
+
+/// One row per enrollment period. Ending an enrollment closes the row, so
+/// re-enrolling later inserts a new one and the history stays intact.
+model Enrollment {
+  id          String           @id @default(uuid())
+  workspaceId String           @map("workspace_id")
+  studentId   String           @map("student_id")
+  classId     String           @map("class_id")
+  status      EnrollmentStatus @default(ACTIVE)
+  enrolledAt  DateTime         @default(now()) @map("enrolled_at") @db.Date
+  endedAt     DateTime?        @map("ended_at") @db.Date
+  notes       String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  student   Student   @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, classId, status])
+  @@index([workspaceId, studentId])
+  @@map("enrollments")
 }
 
 model Membership {
