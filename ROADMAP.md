@@ -274,7 +274,7 @@ Classes are deliberately minimal for now: a name, optional grade/description/cap
 - Capacity is optional (1–1000) and checked when enrolling or reactivating; completed/withdrawn rows do not count. Enrolling in an archived class is refused. Classes with any enrollment rows cannot be deleted (409) and should be archived instead.
 - Status values: class `ACTIVE/ARCHIVED`; enrollment `ACTIVE/COMPLETED/WITHDRAWN`. Moving away from `ACTIVE` sets `endedAt`; reactivating clears it. Re-enrollment after completion keeps the old row.
 - Audit events `CLASS_CREATED`, `CLASS_UPDATED`, `CLASS_DELETED`, `STUDENT_ENROLLED` and `ENROLLMENT_UPDATED` store IDs, changed field names and status transitions only — no student names or notes.
-- Web UI: `/workspaces/[workspaceId]/classes` (search, status filter, pagination), create/edit pages, a class detail page with the enroll picker plus roster actions, and a Classes card on the student detail page. Sidebar gains a "Classes" entry.
+- Web UI: `/workspaces/[workspaceId]/classes` (search, status filter, pagination), create/edit pages, a class detail page with the enroll picker plus roster actions, and a Classes card on the student detail page. Sidebar gains a "Classes" entry, now reachable from the dashboard, Workspaces and student pages (the shell derives it from the students href, commit `fa7f0cd`).
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply both migrations and refresh the client.
 
 Verified: 178 unit tests, 75 mocked HTTP E2E tests, 54 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of class creation, enrollment, capacity refusal, completion/reactivation, archiving, deletion protection and student-side history.

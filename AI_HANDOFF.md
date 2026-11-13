@@ -463,6 +463,7 @@ Delivered in batch 4 (classes + enrollment history):
 - Audit: `CLASS_CREATED`, `CLASS_UPDATED` (changed field names), `CLASS_DELETED`, `STUDENT_ENROLLED` (`classId`, `studentId`) and `ENROLLMENT_UPDATED` (`classId`, `studentId`, changed fields, `from`/`to` when status changed). No student names or notes are stored.
 - Migrations: `20261113150000_add_classes_and_enrollments` (enums, tables, indexes, foreign keys, RLS) and `20261113151000_add_class_deleted_audit` (additive `CLASS_DELETED` enum value).
 - Web: `apps/web/src/lib/classes.ts`, `class-form.tsx`, `class-actions.tsx`, `enroll-student-form.tsx`, `enrollment-actions.tsx`; routes `classes`, `classes/new`, `classes/[classId]` (roster, enroll picker, archive/delete) and `classes/[classId]/edit`; a Classes card on the student detail page; a "Classes" sidebar entry with active-page state.
+- Sidebar links originally depended on each page passing its workspace hrefs, so Classes was disabled everywhere except the classes pages and Students was disabled on the dashboard. `DashboardShell` now derives the Classes href from `studentsHref`, and the dashboard and Workspaces page pass both hrefs from `activeWorkspaceId` (commit `fa7f0cd`).
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply both migrations and refresh the client.
 
 # 10. Testing Status
