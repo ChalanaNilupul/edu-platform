@@ -15,9 +15,10 @@ It records the actual project direction, technical architecture, implementation 
 - Security-event audit logging (finding M4) is implemented as an append-only `audit_events` table written through a best-effort `AuditService`.
 - Phase 3 Batch 1 is implemented: workspace-scoped student profiles with RLS, a students REST module, audit events, and a web directory with detail/create/edit pages.
 - Phase 3 Batch 2 is implemented: workspace-scoped guardians with `StudentGuardian` links, a guardians REST module, primary-contact handling, audit events, and a Guardians card with add/edit/remove pages on the student detail screen.
-- Verified by 117 unit tests, 56 mocked HTTP E2E tests, 40 real-database integration tests, typecheck, lint, format, API build, `next build` and a manual owner walkthrough of the student directory and guardian links.
-- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian reuse across students and CSV import, and the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students) and `e1e35a4` (db:sync) were pushed on `feat/phase-3-student-profiles`; the guardian batch on the same branch is not committed yet.
+- Phase 3 Batch 3 is implemented: preview-first CSV student import with a hand-written RFC 4180 parser, validate/import endpoints, duplicate skipping, a `STUDENTS_IMPORTED` audit event, and a role-aware import page.
+- Verified by 143 unit tests, 61 mocked HTTP E2E tests, 46 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of the student directory, guardian links and CSV import.
+- Still open: runtime rate-limit/Origin verification, email-verification enforcement for workspace actions (M1, intentionally deferred), guardian reuse across students, enrollment (3.3), and the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync) and `c4331d1` (guardians) were pushed on `feat/phase-3-student-profiles`; the CSV import batch on the same branch is not committed yet.
 
 ---
 
@@ -222,7 +223,7 @@ Workspace-owned student record; students do not have logins in this batch.
 - Status values: `ACTIVE`, `INACTIVE`, `GRADUATED`, `WITHDRAWN`. Gender values: `MALE`, `FEMALE`, `OTHER`.
 - `(workspaceId, studentCode)` is unique; indexes cover `(workspaceId, status)` and `(workspaceId, firstName, lastName)`.
 - `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy as the other tenant tables.
-- Enrollment and CSV import are intentionally deferred to later batches.
+- Enrollment is intentionally deferred to a later batch. Bulk CSV creation is handled by the import service (see 9C) rather than by this model.
 
 ## Guardian
 
@@ -353,6 +354,7 @@ Current application routes include:
     ├── /workspaces/[workspaceId]/members
     └── /workspaces/[workspaceId]/students
         ├── /workspaces/[workspaceId]/students/new
+        ├── /workspaces/[workspaceId]/students/import
         └── /workspaces/[workspaceId]/students/[studentId]
             ├── /workspaces/[workspaceId]/students/[studentId]/edit
             └── /workspaces/[workspaceId]/students/[studentId]/guardians
@@ -380,6 +382,8 @@ The students directory, detail, create and edit pages were walked through in a b
 
 The guardian card was walked through the same way: add guardian (first one became primary), add a second guardian as primary (the first was demoted), edit the occupation, and remove a guardian (unlink then delete). `GUARDIAN_CREATED`, `GUARDIAN_UPDATED`, `GUARDIAN_UNLINKED` and `GUARDIAN_DELETED` rows matched the actions.
 
+The CSV import page was walked through with three files: an invalid email row (import blocked, error line shown), a mixed file with an in-file duplicate (2 ready, 1 duplicate; importing created 2 students and skipped 1), and the same mixed file again (both codes reported as existing, import button disabled). The directory then showed the imported records with the lower-cased email, the quoted comma in a last name and the `GRADUATED` status intact.
+
 # 9A. Phase 3 — Student Implementation
 
 Delivered in batch 1 (profiles + directory core):
@@ -404,13 +408,27 @@ Delivered in batch 2 (guardian records + student links):
 - Web: `apps/web/src/lib/guardian.ts`, `guardian-form.tsx`, `guardian-actions.tsx`, the Guardians card on the student detail page, and `students/[studentId]/guardians/new` plus `students/[studentId]/guardians/[guardianId]/edit`. Managers see the actions; teachers see a read-only card.
 - Migration `20261113090000_add_guardians` adds the enum, tables, indexes, foreign keys and RLS policies for both new tables.
 
+# 9C. Phase 3 — CSV Import Implementation
+
+Delivered in batch 3 (preview-first bulk student creation):
+
+- Parser: `apps/api/src/students/csv.ts` implements the RFC 4180 subset the import needs — quoted fields, doubled quotes, embedded newlines, CRLF/CR line endings, a UTF-8 BOM, blank-line skipping and line numbers for every record. It returns headers (trimmed, lower-cased) and records, and throws `CsvParseError` for unclosed quotes, stray quotes, empty or duplicate headers. `MAX_IMPORT_CSV_CHARS` (1,000,000) and `MAX_IMPORT_ROWS` (2,000) live there too.
+- API: `apps/api/src/students/students-import.service.ts` and `dto/import-students.dto.ts`. Routes: `POST /workspaces/:workspaceId/students/import/validate` and `POST /workspaces/:workspaceId/students/import`, both returning 200. Access is OWNER (override), ADMIN, BRANCH_MANAGER; the service calls `requireRoles` inside the tenant transaction like the other student writes.
+- Request body is `{ "csv": "..." }`. The browser reads the file with `File.text()` and posts JSON, so no multipart or upload dependency exists.
+- Headers are snake_case. `first_name` is required; unknown columns are rejected with the supported list; blank optional cells become `null`. Values are validated with `ImportStudentRowDto extends CreateStudentDto` plus an optional `status`, so a CSV row follows exactly the same rules as the single-student form.
+- Report: `{ totalRows, validRows, invalidRows, duplicateRows, rows[] }` where each row carries `line`, `studentCode`, `firstName`, `status` (`VALID`/`INVALID`/`DUPLICATE`) and error messages. Line numbers match the spreadsheet.
+- Import behaviour: any invalid row fails the whole request (400 with `invalidRows`) so a partial surprise import cannot happen. Duplicate `student_code`s — repeated in the file or already in the workspace — are skipped, never updated. Valid rows are written with one `createMany({ skipDuplicates: true })` inside the tenant transaction, which also tolerates a concurrent insert. Result: `{ imported, skipped, duplicates[{ line, studentCode, reason }] }`.
+- Audit: one `STUDENTS_IMPORTED` event per import with `{ imported, skipped }`; no names, codes or row contents. The enum value was added by the additive migration `20261113120000_add_student_import_audit`.
+- Web: `apps/web/src/lib/student-import.ts` (types and limits), `student-import.tsx` (client file picker, template download, preview table with counts and per-row errors, import/result panels) and `students/import/page.tsx` (role-aware server page). Managers get an "Import CSV" action on the directory next to "Add student".
+- Import does not check for duplicate people, only duplicate codes: rows without a `student_code` are always created. Tell users to fill the code column when they need repeat-safe files.
+
 # 10. Testing Status
 
-Current verified results after Phase 3 batch 2:
+Current verified results after Phase 3 batch 3:
 
 ## Unit Tests
 
-117 tests passed across 12 files:
+143 tests passed across 14 files:
 
 - Authentication service.
 - Workspace service.
@@ -418,6 +436,8 @@ Current verified results after Phase 3 batch 2:
 - Memberships service.
 - Invitations service.
 - Students service.
+- Students import service (17 tests covering report shape, per-row errors, in-file and existing duplicates, import counts, blocked invalid files, limits and role rejection).
+- CSV parser (9 tests covering quoting, escapes, embedded newlines, BOM, CRLF, line numbers and malformed input).
 - Guardians service.
 - Session guard.
 - Workspace roles guard.
@@ -427,21 +447,22 @@ Current verified results after Phase 3 batch 2:
 
 ## E2E HTTP Tests
 
-56 tests passed across 5 files:
+61 tests passed across 5 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
-- Students E2E (11).
+- Students E2E (16, including import routing, role refusal and payload validation).
 - Guardians E2E (12).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-40 tests passed against a real PostgreSQL 17 database:
+46 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
 - 7 guardian tests: create with primary defaulting and demotion, detail with linked students, diffed updates with audit metadata, unlink-then-delete with the 409 guard, teacher read-only access, cross-workspace isolation, invalid input and unauthenticated access.
+- 6 import tests: validate/import with in-file and existing duplicates (including that a repeat import never overwrites), rejected invalid files with no writes, per-workspace code scoping, malformed CSV messages, teacher refusal and outsider/unauthenticated access.
 - 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians and links), cross-tenant update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
@@ -527,7 +548,7 @@ Implemented already: tenant context resolution through the session's active work
 
 ## Phase 3 Remaining Work
 
-- Student profiles and directory (3.1, 3.4) plus guardians (3.2) are delivered; enrollment (3.3) and CSV import (3.5) remain.
+- Student profiles and directory (3.1, 3.4), guardians (3.2) and CSV import (3.5) are delivered; enrollment (3.3) remains.
 - Reusing one guardian record across several students (for siblings) is not implemented; every guardian is created for one student context.
 - `STUDENT` and `PARENT` memberships still have no student-directory read access by design; revisit when the student portal phase starts.
 - Users without an active workspace must switch workspace once before the Students sidebar entry becomes a link.
@@ -656,12 +677,11 @@ After Phase 2, development should follow this sequence.
 
 ## Phase 3 — Student Management
 
-Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, guardian records and student links, and workspace-scoped RLS plus audit events.
+Delivered: student profiles (create, edit, status), student directory with search, filtering and pagination, detail pages, guardian records and student links, preview-first CSV import with duplicate skipping, and workspace-scoped RLS plus audit events.
 
 Still open:
 
 - Student enrollment.
-- CSV import with validation.
 
 ## Phase 4 — Teacher Management
 
@@ -752,7 +772,7 @@ Follow this order:
 1. Manually walk through registration, verification, login, workspace creation/switching, invitations, role changes and password reset in a browser.
 2. Verify rate limiting and Origin checking at runtime.
 3. Decide whether to extend email-verification enforcement beyond invitation acceptance.
-4. Continue Phase 3 — Student Management (enrollment, then CSV import).
+4. Continue Phase 3 — Student Management (enrollment).
 
 Do not add student, attendance or finance modules before steps 1–3 are done. Application-layer authorization, database integration tests, RLS, the restricted runtime role, audit logging and the Phase 2 security review are in place; browser verification, runtime security checks and the email-verification scope decision remain open.
 

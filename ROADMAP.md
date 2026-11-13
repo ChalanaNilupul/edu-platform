@@ -4,7 +4,7 @@ Last updated: November 13, 2026
 
 ## Project Status
 
-**Current Phase: Phase 3 — Student Management (batches 1–2 delivered)**
+**Current Phase: Phase 3 — Student Management (batches 1–3 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -219,11 +219,11 @@ Verified: 85 unit tests, 33 mocked HTTP E2E tests, 27 real-database integration 
 
 # Phase 3 — Student Management
 
-**Status: In progress — batches 1–2 (profiles/directory core, guardians) delivered**
+**Status: In progress — batches 1–3 (profiles/directory core, guardians, CSV import) delivered**
 
 ### Student profiles and directory notes (November 13, 2026)
 
-Students are workspace records with no login of their own; guardian links and CSV import are deferred.
+Students are workspace records with no login of their own; guardian links and CSV import were delivered in later batches.
 
 - `students` table (migration `20261112184452_add_students`) with `ACTIVE/INACTIVE/GRADUATED/WITHDRAWN` status, optional personal, contact and academic fields, a per-workspace unique `student_code`, and RLS policies matching the other tenant tables.
 - REST routes under `/workspaces/:workspaceId/students`: list (search, status filter, pagination), detail, create and partial update.
@@ -248,6 +248,21 @@ Guardians are workspace-owned records linked to one or more students through a j
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to create the new tables and refresh the client.
 
 Verified: 117 unit tests, 56 mocked HTTP E2E tests, 40 real-database integration tests, typecheck, lint, format and a manual owner walkthrough of adding, promoting, editing and removing guardians.
+
+### CSV student import notes (November 13, 2026)
+
+Import is a two-step, preview-first flow: validate the file, review every row, then create the accepted rows in one transaction.
+
+- Hand-written RFC 4180 parser (`apps/api/src/students/csv.ts`): quoted fields, doubled quotes, embedded newlines, CRLF, a UTF-8 BOM, blank-line skipping and per-row line numbers for error reports.
+- REST routes: `POST /workspaces/:workspaceId/students/import/validate` and `POST /workspaces/:workspaceId/students/import`, both accepting `{ "csv": "..." }` and returning 200. Access: OWNER (override), ADMIN, BRANCH_MANAGER only; teachers are refused.
+- Limits: 1,000,000 characters and 2,000 data rows per file. Headers must be snake_case; `first_name` is required and unknown columns are rejected with the supported list. Blank optional cells become null.
+- Validation reuses `CreateStudentDto` (so names, email, phone, date and enums match single-student create) plus an optional `status`. Invalid rows are reported with their spreadsheet line and block the import entirely; duplicates are reported and skipped.
+- Duplicate detection is exact `student_code` matching, both inside the file (first occurrence wins) and against the workspace. Existing students are never updated; `createMany` also uses `ON CONFLICT DO NOTHING` to survive a concurrent insert.
+- One `STUDENTS_IMPORTED` audit event per import with `{ imported, skipped }` — no row contents or student PII. New enum value migration: `20261113120000_add_student_import_audit`.
+- Web UI: `/workspaces/[workspaceId]/students/import` with file picker, template download, preview table (counts, per-row problems, first 200 rows), an import button that stays disabled while invalid rows exist, and a result summary that lists skipped duplicates. The directory has an "Import CSV" action for managers.
+- The CSV is read in the browser with `File.text()` and posted as JSON, so no multipart/upload dependency was added.
+
+Verified: 143 unit tests, 61 mocked HTTP E2E tests, 46 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough of an invalid file, a mixed file and a repeat upload.
 
 ## 3.1 Student Profiles
 
@@ -283,11 +298,11 @@ Verified: 117 unit tests, 56 mocked HTTP E2E tests, 40 real-database integration
 
 ## 3.5 Student Import
 
-- [ ] Implement CSV upload.
-- [ ] Validate imported records.
-- [ ] Detect duplicate records.
-- [ ] Provide import error reports.
-- [ ] Support validated bulk import.
+- [x] Implement CSV upload.
+- [x] Validate imported records.
+- [x] Detect duplicate records.
+- [x] Provide import error reports.
+- [x] Support validated bulk import.
 
 # Phase 4 — Teacher Management
 

@@ -1,7 +1,7 @@
 export const instant = false;
 
 import Link from 'next/link';
-import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Search, Users } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, Plus, Search, Upload, Users } from 'lucide-react';
 
 import { DashboardShell } from '@/components/dashboard-shell';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
@@ -181,13 +181,23 @@ export default async function StudentsPage({ params, searchParams }: StudentsPag
           </form>
 
           {canManage ? (
-            <Link
-              href={`/workspaces/${currentWorkspace.id}/students/new`}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              <Plus size={16} />
-              Add student
-            </Link>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Link
+                href={`/workspaces/${currentWorkspace.id}/students/import`}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              >
+                <Upload size={16} />
+                Import CSV
+              </Link>
+
+              <Link
+                href={`/workspaces/${currentWorkspace.id}/students/new`}
+                className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700"
+              >
+                <Plus size={16} />
+                Add student
+              </Link>
+            </div>
           ) : null}
         </div>
 
