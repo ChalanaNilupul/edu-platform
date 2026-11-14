@@ -58,7 +58,7 @@ export async function createTestContext(): Promise<TestContext> {
 
 export async function truncateAll(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "audit_events", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "teacher_profiles", "enrollments", "classes", "student_guardians", "guardians", "students", "sessions", ' +
+    'TRUNCATE TABLE "audit_events", "attendance_records", "attendance_sessions", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "teacher_profiles", "enrollments", "classes", "student_guardians", "guardians", "students", "sessions", ' +
       '"workspace_invitations", "memberships", "email_verification_tokens", "password_reset_tokens", ' +
       '"workspaces", "users", "database_health" RESTART IDENTITY CASCADE',
   );

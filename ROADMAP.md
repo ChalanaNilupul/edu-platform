@@ -1,10 +1,10 @@
 # EduPlatform Development Roadmap
 
-Last updated: November 13, 2026
+Last updated: November 14, 2026
 
 ## Project Status
 
-**Current Phase: Phase 3 — Student Management (batches 1–4 delivered)**
+**Current Phase: Phase 6 — Attendance Management (batch 1 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -417,12 +417,27 @@ Verified: 260 unit tests, 110 mocked HTTP E2E tests, 88 real-database integratio
 
 # Phase 6 — Attendance Management
 
-**Status: Not Started**
+**Status: In progress — batch 1 (daily register API and class-page UI) delivered**
 
-- [ ] Implement daily attendance.
-- [ ] Implement manual attendance recording.
-- [ ] Implement attendance editing.
-- [ ] Implement attendance history.
+### Daily register notes (November 14, 2026)
+
+Attendance is stored per class per day: one `attendance_sessions` row per `(class_id, session_date)` holding the author, and one `attendance_records` row per student with a status and optional note. Records are never deleted when a student leaves the class, so saved history keeps the students who were enrolled on that day.
+
+- `attendance_sessions` and `attendance_records` tables (migration `20261114190000_add_attendance`) with `PRESENT/ABSENT/LATE/EXCUSED` statuses, `(class_id, session_date)` and `(session_id, student_id)` uniqueness, cascade foreign keys, a `SET NULL` author link to the membership that last saved the register, and tenant RLS on both tables.
+- Routes under `/workspaces/:workspaceId`: `GET /classes/:classId/attendance?date=YYYY-MM-DD` and `PUT /classes/:classId/attendance` (`{ date, records: [{ studentId, status, note }] }`). Reads allow OWNER/ADMIN/BRANCH_MANAGER/TEACHER.
+- Writes: managers (OWNER/ADMIN/BRANCH_MANAGER) and the class's own assigned teachers. Any other teacher gets 403 ("Only this class's teachers can record attendance"); students and outsiders are refused by the role guard.
+- A register only shows the class's currently active enrollments, and a save rejects students who are not actively enrolled (400). Unmarked students are simply absent from `records`, so a partial register is valid. Archived classes reject writes with 409 but stay readable.
+- Dates are calendar days (`YYYY-MM-DD`) validated as real dates, and a save more than one day in the future is refused (a one-day slack covers workspaces ahead of UTC).
+- Edits are allowed at any time. Saving diffs against the stored register: only changed records are written, and `ATTENDANCE_RECORDED` is logged the first time a day is saved, `ATTENDANCE_UPDATED` only when a later save actually changes a mark or note. Metadata carries counts and student ids — no names or note text.
+- Web UI: an Attendance card on the class detail page with previous/next day navigation (next stops at today), status buttons, per-student notes, a "Mark remaining present" shortcut, live counts and a "Last saved ... by ..." line. Non-writers see the same register as read-only status badges with an explanation.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh the role grants.
+
+Verified: 276 unit tests, 118 mocked HTTP E2E tests, 94 real-database integration tests (including RLS on `attendance_sessions` and `attendance_records`), typecheck, lint, format, API build, `next build` and a browser walkthrough (mark and save a register, correct an excusal, confirm an earlier day is empty, restore the saved day, and confirm the read-only view for a teacher who is not assigned to the class).
+
+- [x] Implement daily attendance.
+- [x] Implement manual attendance recording.
+- [x] Implement attendance editing.
+- [x] Implement attendance history (day-by-day register viewing).
 - [ ] Implement student attendance summaries.
 - [ ] Implement class attendance summaries.
 - [ ] Implement attendance reports.

@@ -80,10 +80,14 @@ const classSubjectA = randomUUID();
 const classSubjectB = randomUUID();
 const slotA = randomUUID();
 const slotB = randomUUID();
+const sessionA = randomUUID();
+const sessionB = randomUUID();
+const attendanceRecordA = randomUUID();
+const attendanceRecordB = randomUUID();
 
 async function seed() {
   await query(
-    'TRUNCATE TABLE "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "attendance_records", "attendance_sessions", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
   );
 
   const now = new Date().toISOString();
@@ -240,6 +244,35 @@ async function seed() {
       membershipB1,
     ],
   );
+
+  await query(
+    `INSERT INTO "attendance_sessions"
+       ("id", "workspace_id", "class_id", "session_date", "recorded_by_membership_id",
+        "created_at", "updated_at")
+     VALUES
+       ($1, $2, $3, CURRENT_DATE, $4, $7, $7),
+       ($5, $6, $8, CURRENT_DATE, $9, $7, $7)`,
+    [sessionA, workspaceA, classA, membershipA2, sessionB, workspaceB, now, classB, membershipB1],
+  );
+
+  await query(
+    `INSERT INTO "attendance_records"
+       ("id", "workspace_id", "session_id", "student_id", "status", "created_at", "updated_at")
+     VALUES
+       ($1, $2, $3, $4, 'PRESENT', $6, $6),
+       ($5, $7, $8, $9, 'ABSENT', $6, $6)`,
+    [
+      attendanceRecordA,
+      workspaceA,
+      sessionA,
+      studentA,
+      attendanceRecordB,
+      now,
+      workspaceB,
+      sessionB,
+      studentB,
+    ],
+  );
 }
 
 beforeAll(async () => {
@@ -269,6 +302,8 @@ describe('Row level security on tenant tables', () => {
       const subjects = await query('SELECT * FROM "subjects"');
       const classSubjects = await query('SELECT * FROM "class_subjects"');
       const slots = await query('SELECT * FROM "class_schedule_slots"');
+      const sessions = await query('SELECT * FROM "attendance_sessions"');
+      const attendanceRecords = await query('SELECT * FROM "attendance_records"');
 
       expect(memberships.rowCount).toBe(0);
       expect(invitations.rowCount).toBe(0);
@@ -281,6 +316,8 @@ describe('Row level security on tenant tables', () => {
       expect(subjects.rowCount).toBe(0);
       expect(classSubjects.rowCount).toBe(0);
       expect(slots.rowCount).toBe(0);
+      expect(sessions.rowCount).toBe(0);
+      expect(attendanceRecords.rowCount).toBe(0);
     });
   });
 
@@ -299,6 +336,10 @@ describe('Row level security on tenant tables', () => {
       const subjects = await query('SELECT "id", "workspace_id" FROM "subjects"');
       const classSubjects = await query('SELECT "id", "workspace_id" FROM "class_subjects"');
       const slots = await query('SELECT "id", "workspace_id" FROM "class_schedule_slots"');
+      const sessions = await query('SELECT "id", "workspace_id" FROM "attendance_sessions"');
+      const attendanceRecords = await query(
+        'SELECT "id", "workspace_id" FROM "attendance_records"',
+      );
 
       expect(memberships.rowCount).toBe(2);
       expect(memberships.rows.every((row) => row.workspace_id === workspaceA)).toBe(true);
@@ -312,6 +353,8 @@ describe('Row level security on tenant tables', () => {
       expect(subjects.rows.map((row) => row.id)).toEqual([subjectA]);
       expect(classSubjects.rows.map((row) => row.id)).toEqual([classSubjectA]);
       expect(slots.rows.map((row) => row.id)).toEqual([slotA]);
+      expect(sessions.rows.map((row) => row.id)).toEqual([sessionA]);
+      expect(attendanceRecords.rows.map((row) => row.id)).toEqual([attendanceRecordA]);
     });
   });
 
@@ -446,6 +489,33 @@ describe('Row level security on tenant tables', () => {
         ),
       ).rejects.toThrow(/row-level security policy/i);
     });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "attendance_sessions"
+             ("id", "workspace_id", "class_id", "session_date", "recorded_by_membership_id",
+              "created_at", "updated_at")
+           VALUES ($1, $2, $3, CURRENT_DATE, $4, now(), now())`,
+          [randomUUID(), workspaceB, classB, membershipB1],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "attendance_records"
+             ("id", "workspace_id", "session_id", "student_id", "status", "created_at", "updated_at")
+           VALUES ($1, $2, $3, $4, 'PRESENT', now(), now())`,
+          [randomUUID(), workspaceB, sessionB, studentB],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
   });
 
   it('cannot update or delete another tenant rows', async () => {
@@ -492,6 +562,20 @@ describe('Row level security on tenant tables', () => {
       const removeSlots = await query(`DELETE FROM "class_schedule_slots" WHERE "id" = $1`, [
         slotB,
       ]);
+      const updateSessions = await query(
+        `UPDATE "attendance_sessions" SET "recorded_by_membership_id" = NULL WHERE "workspace_id" = $1`,
+        [workspaceB],
+      );
+      const removeSessions = await query(`DELETE FROM "attendance_sessions" WHERE "id" = $1`, [
+        sessionB,
+      ]);
+      const updateRecords = await query(
+        `UPDATE "attendance_records" SET "status" = 'EXCUSED' WHERE "workspace_id" = $1`,
+        [workspaceB],
+      );
+      const removeRecords = await query(`DELETE FROM "attendance_records" WHERE "id" = $1`, [
+        attendanceRecordB,
+      ]);
 
       expect(update.rowCount).toBe(0);
       expect(remove.rowCount).toBe(0);
@@ -505,6 +589,10 @@ describe('Row level security on tenant tables', () => {
       expect(removeClassSubjects.rowCount).toBe(0);
       expect(updateSlots.rowCount).toBe(0);
       expect(removeSlots.rowCount).toBe(0);
+      expect(updateSessions.rowCount).toBe(0);
+      expect(removeSessions.rowCount).toBe(0);
+      expect(updateRecords.rowCount).toBe(0);
+      expect(removeRecords.rowCount).toBe(0);
     });
   });
 
@@ -523,6 +611,8 @@ describe('Row level security on tenant tables', () => {
       const subjects = await query('SELECT "id" FROM "subjects"');
       const classSubjects = await query('SELECT "id" FROM "class_subjects"');
       const slots = await query('SELECT "id" FROM "class_schedule_slots"');
+      const sessions = await query('SELECT "id" FROM "attendance_sessions"');
+      const attendanceRecords = await query('SELECT "id" FROM "attendance_records"');
 
       expect(memberships.rowCount).toBe(3);
       expect(invitations.rowCount).toBe(2);
@@ -535,6 +625,8 @@ describe('Row level security on tenant tables', () => {
       expect(subjects.rowCount).toBe(2);
       expect(classSubjects.rowCount).toBe(2);
       expect(slots.rowCount).toBe(2);
+      expect(sessions.rowCount).toBe(2);
+      expect(attendanceRecords.rowCount).toBe(2);
     });
   });
 

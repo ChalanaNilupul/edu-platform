@@ -79,6 +79,13 @@ enum DayOfWeek {
   SUNDAY
 }
 
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -120,6 +127,8 @@ enum AuditEventType {
   CLASS_SCHEDULE_SLOT_CREATED
   CLASS_SCHEDULE_SLOT_UPDATED
   CLASS_SCHEDULE_SLOT_DELETED
+  ATTENDANCE_RECORDED
+  ATTENDANCE_UPDATED
 }
 
 model User {
@@ -149,19 +158,21 @@ model Workspace {
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")
 
-  memberships      Membership[]
-  invitations      WorkspaceInvitation[]
-  students         Student[]
-  guardians        Guardian[]
-  studentGuardians StudentGuardian[]
-  classes          Class[]
-  enrollments      Enrollment[]
-  teacherProfiles  TeacherProfile[]
-  classTeachers    ClassTeacher[]
-  subjects         Subject[]
-  classSubjects    ClassSubject[]
-  scheduleSlots    ClassScheduleSlot[]
-  activeSessions   Session[]             @relation("SessionActiveWorkspace")
+  memberships        Membership[]
+  invitations        WorkspaceInvitation[]
+  students           Student[]
+  guardians          Guardian[]
+  studentGuardians   StudentGuardian[]
+  classes            Class[]
+  enrollments        Enrollment[]
+  teacherProfiles    TeacherProfile[]
+  classTeachers      ClassTeacher[]
+  subjects           Subject[]
+  classSubjects      ClassSubject[]
+  scheduleSlots      ClassScheduleSlot[]
+  attendanceSessions AttendanceSession[]
+  attendanceRecords  AttendanceRecord[]
+  activeSessions     Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
 }
@@ -189,8 +200,9 @@ model Student {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  guardians   StudentGuardian[]
-  enrollments Enrollment[]
+  guardians         StudentGuardian[]
+  enrollments       Enrollment[]
+  attendanceRecords AttendanceRecord[]
 
   @@unique([workspaceId, studentCode])
   @@index([workspaceId, status])
@@ -252,11 +264,12 @@ model Class {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  enrollments Enrollment[]
-  teachers    ClassTeacher[]
-  subjects    ClassSubject[]
-  schedule    ClassScheduleSlot[]
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  enrollments        Enrollment[]
+  teachers           ClassTeacher[]
+  subjects           ClassSubject[]
+  schedule           ClassScheduleSlot[]
+  attendanceSessions AttendanceSession[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -363,14 +376,56 @@ model ClassScheduleSlot {
   createdAt    DateTime  @default(now()) @map("created_at")
   updatedAt    DateTime  @updatedAt @map("updated_at")
 
-  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  class      Class      @relation(fields: [classId], references: [id], onDelete: Cascade)
-  subject    Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  workspace  Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  class      Class       @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject    Subject     @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, classId, dayOfWeek, startMinutes], map: "class_schedule_slots_class_time_idx")
   @@index([workspaceId, membershipId, dayOfWeek, startMinutes], map: "class_schedule_slots_teacher_time_idx")
   @@map("class_schedule_slots")
+}
+
+/// One register per class per calendar day. A session only exists once a
+/// register has been saved, so missing dates are simply unmarked days.
+model AttendanceSession {
+  id                     String   @id @default(uuid())
+  workspaceId            String   @map("workspace_id")
+  classId                String   @map("class_id")
+  sessionDate            DateTime @map("session_date") @db.Date
+  recordedByMembershipId String?  @map("recorded_by_membership_id")
+  createdAt              DateTime @default(now()) @map("created_at")
+  updatedAt              DateTime @updatedAt @map("updated_at")
+
+  workspace  Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  class      Class              @relation(fields: [classId], references: [id], onDelete: Cascade)
+  recordedBy Membership?        @relation(fields: [recordedByMembershipId], references: [id], onDelete: SetNull)
+  records    AttendanceRecord[]
+
+  @@unique([classId, sessionDate], map: "attendance_sessions_class_date_key")
+  @@index([workspaceId, sessionDate])
+  @@map("attendance_sessions")
+}
+
+/// One status per student per session; the note is optional context such as
+/// "arrived 10 minutes late" or a guardian phone call.
+model AttendanceRecord {
+  id          String           @id @default(uuid())
+  workspaceId String           @map("workspace_id")
+  sessionId   String           @map("session_id")
+  studentId   String           @map("student_id")
+  status      AttendanceStatus
+  note        String?
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+
+  workspace Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, studentId], map: "attendance_records_session_student_key")
+  @@index([workspaceId, studentId])
+  @@map("attendance_records")
 }
 
 model Membership {
@@ -385,9 +440,10 @@ model Membership {
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
-  teacherProfile TeacherProfile?
-  classAssignments ClassTeacher[]
-  scheduleSlots     ClassScheduleSlot[]
+  teacherProfile     TeacherProfile?
+  classAssignments   ClassTeacher[]
+  scheduleSlots      ClassScheduleSlot[]
+  attendanceSessions AttendanceSession[]
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])
@@ -403,7 +459,7 @@ model TeacherProfile {
   qualifications  String?
   specializations String[]  @default([])
   bio             String?
-  joinedAt        DateTime? @db.Date @map("joined_at")
+  joinedAt        DateTime? @map("joined_at") @db.Date
   notes           String?
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")

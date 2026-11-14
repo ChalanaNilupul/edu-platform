@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { AssignTeacherForm } from '@/components/assign-teacher-form';
+import { AttendanceManager } from '@/components/attendance-manager';
 import { ClassActions } from '@/components/class-actions';
 import { ClassSubjectForm } from '@/components/class-subject-form';
 import { ClassScheduleManager } from '@/components/class-schedule-manager';
@@ -21,6 +22,7 @@ import { DashboardShell } from '@/components/dashboard-shell';
 import { EnrollStudentForm } from '@/components/enroll-student-form';
 import { EnrollmentActions } from '@/components/enrollment-actions';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
+import { todayInColombo, type AttendanceRegisterResponse } from '@/lib/attendance';
 import {
   ENROLLMENT_STATUSES,
   classCapacityLabel,
@@ -137,6 +139,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
   const rawPage = typeof queryParams.page === 'string' ? Number(queryParams.page) : 1;
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   const canManage = canManageClasses(currentWorkspace.role);
+  const attendanceDate = todayInColombo();
 
   const rosterParams = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
 
@@ -156,6 +159,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     classSubjectsResponse,
     subjectDirectoryResponse,
     scheduleResponse,
+    attendanceResponse,
   ] = await Promise.all([
     fetch(
       `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
@@ -193,6 +197,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
       headers,
       cache: 'no-store',
     }),
+    fetch(
+      `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/attendance?date=${attendanceDate}`,
+      { headers, cache: 'no-store' },
+    ),
   ]);
 
   if (!rosterResponse.ok) {
@@ -211,6 +219,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     throw new Error('Unable to load the class timetable.');
   }
 
+  if (!attendanceResponse.ok) {
+    throw new Error('Unable to load the attendance register.');
+  }
+
   const roster = (await rosterResponse.json()) as EnrollmentListResponse;
   const enrolledStudentIds =
     activeResponse && activeResponse.ok
@@ -223,6 +235,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
       : [];
   const classSubjects = (await classSubjectsResponse.json()) as ClassSubjectListResponse;
   const schedule = (await scheduleResponse.json()) as ClassScheduleListResponse;
+  const initialAttendance = (await attendanceResponse.json()) as AttendanceRegisterResponse;
   const subjectCatalogue =
     subjectDirectoryResponse && subjectDirectoryResponse.ok
       ? ((await subjectDirectoryResponse.json()) as SubjectListResponse).items
@@ -237,6 +250,17 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
   }
 
   subjectPicker.sort((left, right) => left.name.localeCompare(right.name));
+
+  const isAssignedTeacher = classTeachers.items.some(
+    (assignment) => assignment.membership.user.id === user.id,
+  );
+  const canEditAttendance = (canManage || isAssignedTeacher) && schoolClass.status === 'ACTIVE';
+  const attendanceReadOnlyReason =
+    schoolClass.status === 'ACTIVE'
+      ? canEditAttendance
+        ? undefined
+        : "Only managers and this class's teachers can change the register."
+      : 'This class is archived. Attendance is read-only.';
 
   function rosterHref(targetPage: number) {
     const next = new URLSearchParams();
@@ -570,6 +594,31 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
             slots={schedule.items}
             subjects={classSubjects.items}
             teachers={teacherDirectory}
+          />
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Attendance</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Daily register for the students currently enrolled in this class.
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            {initialAttendance.students.length} students
+          </span>
+        </div>
+
+        <div className="mt-4">
+          <AttendanceManager
+            workspaceId={currentWorkspace.id}
+            classId={schoolClass.id}
+            canEdit={canEditAttendance}
+            today={attendanceDate}
+            initialRegister={initialAttendance}
+            readOnlyReason={attendanceReadOnlyReason}
           />
         </div>
       </section>

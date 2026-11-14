@@ -22,10 +22,11 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 4 Batch 2 is implemented: append-only class-teacher assignments with one active primary teacher per class, partial unique indexes, tenant RLS, manager-only assignment changes, audit events, and a Teachers card on the class page plus an Assigned classes card on the teacher page.
 - Phase 5 Batch 1 is implemented: a workspace-level subject catalogue with optional unique codes, a `class_subjects` link table, tenant RLS on both, manager-only CRUD and class-link routes, audit events, a subjects directory with create/edit pages, and a subject picker on the class detail page.
 - Phase 5 Batch 2 is implemented: recurring weekly timetable slots per class with an optional teacher and room, `btree_gist` exclusion constraints for class and teacher overlap, manager-only writes, audit events, and a Weekly timetable card with an add/edit form on the class detail page.
+- Phase 6 Batch 1 is implemented: per-class daily attendance registers (one session per class per day, one record per student), `PRESENT/ABSENT/LATE/EXCUSED` statuses, tenant RLS on both tables, manager plus assigned-class-teacher writes, audit events only on real changes, and an Attendance card with day navigation on the class detail page.
 - Runtime verification of rate limiting and Origin/CSRF checking is complete (November 13, 2026): the global 30 req/60s cap and the auth-route 5/min and 3/min limits return 429; unsafe requests with a foreign or missing Origin are rejected with 403; spoofed `X-Forwarded-For` does not reset the limit while `TRUST_PROXY=false`.
-- Verified by 260 unit tests, 110 mocked HTTP E2E tests, 88 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, the subject catalogue and class linking, the weekly timetable (overlap rejection, adjacent slots, edit and remove) and the unverified-email banner plus blocked workspace creation.
-- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 weekly availability; the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement), `f72f091` (Phase 4 batch 1) and `9ba01fb` (Phase 4 batch 2) were pushed on `feat/phase-3-student-profiles`. Phase 5 batches 1 and 2 exist only in the AI copy until reviewed and committed.
+- Verified by 276 unit tests, 118 mocked HTTP E2E tests, 94 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, the subject catalogue and class linking, the weekly timetable (overlap rejection, adjacent slots, edit and remove), the daily attendance register (save, correct, day navigation, read-only teacher view) and the unverified-email banner plus blocked workspace creation.
+- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 weekly availability; attendance summaries and reports; the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement), `f72f091` (Phase 4 batch 1) and `9ba01fb` (Phase 4 batch 2) were pushed on `feat/phase-3-student-profiles`. Phase 5 batches 1–2 and Phase 6 batch 1 exist only in the AI copy until reviewed and committed.
 
 ---
 
@@ -60,7 +61,7 @@ Current development branch:
 
 Current development phase:
 
-**Phase 3 — Student Management (batches 1–4 delivered)**
+**Phase 6 — Attendance Management (batch 1 delivered)**
 
 Do not assume that Phase 2 or Phase 3 has been merged into `main`.
 
@@ -317,6 +318,16 @@ Recurring weekly timetable period for a class. Slots store a weekday and minutes
 - Reads follow the class reader roles; writes are manager-only. Archived classes reject writes, the subject must be linked to the class and active, and the optional teacher must be directory-eligible.
 - Prisma reports exclusion violations as `P2039` with a Postgres `23P01` cause; the service maps that to the same 409 conflict message as its pre-check.
 
+## AttendanceSession and AttendanceRecord
+
+Daily register for a class: one session row per class per day, one record row per student on that day.
+
+- `AttendanceSession`: `workspaceId`, `classId`, `sessionDate` (`DATE`), optional `recordedByMembershipId` (the membership that last saved the register, `ON DELETE SET NULL` so history survives member removal). `(classId, sessionDate)` is unique; index covers `(workspaceId, sessionDate)`.
+- `AttendanceRecord`: `workspaceId`, `sessionId`, `studentId`, `status` (`PRESENT`/`ABSENT`/`LATE`/`EXCUSED`) and optional `note`. `(sessionId, studentId)` is unique; index covers `(workspaceId, studentId)`.
+- Cascades from `Workspace`, `Class`, `Session` and `Student`; RLS is enabled and forced with the same tenant policy on both tables.
+- Records are never deleted when a student leaves a class, so a saved day still lists the students who were enrolled then. Registers only show currently active enrollments when marking.
+- Reads follow the class reader roles. Writes allow OWNER/ADMIN/BRANCH_MANAGER plus TEACHER members with an active `ClassTeacher` assignment for that class; other teachers get 403. Archived classes reject writes (409) but stay readable.
+
 # 7. Authentication Implementation
 
 Implemented backend functionality:
@@ -469,6 +480,8 @@ The classes and enrollment flow was walked through in a browser: empty classes l
 
 The teacher profiles flow was walked through in a browser: owner opens the Teachers directory (seeded TEACHER membership shown with "No profile yet") → detail → "Add profile" form (phone, teaching-since date, qualifications, comma-separated specializations, bio, notes) → save → detail shows the fields with duplicate specializations removed → the teacher signs in, opens their own profile, edits the bio and saves → a STUDENT membership opening the directory sees the "Teachers are restricted" notice. `TEACHER_PROFILE_CREATED` and `TEACHER_PROFILE_UPDATED` rows appeared in `audit_events`; the walkthrough workspace, memberships and users were deleted afterwards.
 
+The attendance register was walked through in a browser: mark three students (Present, Late with a note, Absent) → live counts and "Unsaved changes" → "Save register" shows "Register saved by …" and "Last saved … by …" → change the late student to Excused and save again (counts update) → "Previous day" shows an empty register for 2026-11-13 → "Next day" restores the saved marks and note → a teacher who is not assigned to the class sees the same register read-only (status badges, no status buttons or save controls) with the "Only managers and this class's teachers can change the register." banner. The walkthrough workspace, users, students and attendance rows were deleted afterwards.
+
 # 9A. Phase 3 — Student Implementation
 
 Delivered in batch 1 (profiles + directory core):
@@ -593,13 +606,27 @@ Delivered in batch 2. Slots are recurring weekly periods (weekday plus minute ra
 - Web: `apps/web/src/lib/schedule.ts` (day labels, time conversion, slot typing), `components/class-schedule-manager.tsx` and a Weekly timetable card on the class detail page — add/edit form with day, start/end, subject, optional teacher and room; slots grouped by day with manager-only edit/remove; read-only for other staff.
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration, install `btree_gist` and refresh role grants.
 
+# 9I. Phase 6 — Daily Attendance Implementation
+
+Delivered in batch 1. Attendance is recorded per class per day; summaries and reports remain:
+
+- API: `apps/api/src/classes/attendance.controller.ts`, `attendance.service.ts` and DTOs (`get-attendance.query.ts`, `save-attendance.dto.ts`), registered in `ClassesModule`. Routes under `/workspaces/:workspaceId`:
+  - `GET /classes/:classId/attendance?date=YYYY-MM-DD` — the register for one calendar day: session metadata, the class's active students with their status (or null) and note, and counts by status.
+  - `PUT /classes/:classId/attendance` — body `{ date, records: [{ studentId, status, note? }] }`; creates the session on first save and upserts only changed records afterwards. 200 with the saved register.
+- Access: reads for OWNER (override)/ADMIN/BRANCH_MANAGER/TEACHER; writes for OWNER (override)/ADMIN/BRANCH_MANAGER plus a TEACHER with an active assignment on that class. Another teacher receives 403 "Only this class's teachers can record attendance"; students and outsiders are refused by the guard.
+- Rules: dates must be real `YYYY-MM-DD` calendar days; saves more than one day ahead are refused (one day of slack covers workspaces ahead of UTC). Every student in a save must be actively enrolled in the class (400), archived classes reject writes (409) but remain readable, and duplicate student ids in one payload are rejected. Partial registers are valid — unmarked students are simply absent from `records`.
+- Diffed writes: unchanged marks are not rewritten, records for students who have since left the class are kept, and audit rows are written only when something changed — `ATTENDANCE_RECORDED` on the first save of a day, `ATTENDANCE_UPDATED` on later real changes, with counts and student ids but no names or note text.
+- Web: `apps/web/src/lib/attendance.ts` (statuses, labels, colors, `todayInColombo()` and count helpers), `components/attendance-manager.tsx` and an Attendance card on the class detail page. The card has previous/next day controls (next stops at today), status buttons, per-student notes, "Mark remaining present", live counts, a "Last saved … by …" line and an unsaved-changes marker. Non-writers see read-only status badges with a reason banner ("Only managers and this class's teachers can change the register." / archived notice). The card keeps its own client state, so saving does not reset the selected date.
+- Migration: `20261114190000_add_attendance` (AttendanceStatus enum, two audit values, both tables, unique indexes, FKs, RLS enabled/forced with the tenant policy).
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh role grants.
+
 # 10. Testing Status
 
-Current verified results after Phase 5 batch 2:
+Current verified results after Phase 6 batch 1:
 
 ## Unit Tests
 
-260 tests passed across 20 files:
+276 tests passed across 21 files:
 
 - Authentication service.
 - Workspace service.
@@ -614,6 +641,7 @@ Current verified results after Phase 5 batch 2:
 - Class-teachers service (20 tests covering class and teacher views, manager-only history, assignment validation, primary moves, soft-end history and role checks).
 - Subjects service (25 tests covering list filters/pagination, create/update/delete rules, duplicate names and codes, P2002 mapping, archive audit transitions, class subject views, selection replacement, archived-class and archived-subject rules, and role checks).
 - Class schedule service (23 tests covering list ordering, create variants and adjacent times, archived-class/minutes/subject/teacher rules, class and teacher overlap conflicts including the P2039 mapping, diffed updates, deletes and role checks).
+- Attendance service (16 tests covering the unmarked roster, merged saved statuses, invalid dates, missing classes, first save and audit metadata, no-op saves, corrections, duplicate students, future dates, non-enrolled students, archived classes, assigned vs unassigned teachers, manager access and leaver history).
 - Enrollments service (19 tests covering capacity, archived classes, history, status transitions, `endedAt` handling, duplicate 409 and role checks).
 - Teachers service (11 tests covering directory eligibility, search/status/pagination, detail 404s, profile creation and update, empty-payload rejection, and manager vs teacher-self authorization).
 - Session guard.
@@ -624,7 +652,7 @@ Current verified results after Phase 5 batch 2:
 
 ## E2E HTTP Tests
 
-110 tests passed across 10 files:
+118 tests passed across 11 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
@@ -635,11 +663,12 @@ Current verified results after Phase 5 batch 2:
 - Class teachers E2E (9: unauthenticated refusal, list history flag, assign, missing membership id, primary patch, remove, teacher history, malformed id, student refusal).
 - Subjects E2E (10: unauthenticated refusal, directory query parameters, create with code normalisation, empty name rejection, patch, delete, class subject read/replace, duplicate and malformed ids, student refusal).
 - Class schedule E2E (10: unauthenticated refusal, list, create, invalid payloads, unequal minutes rejection, patch, delete, malformed ids, student refusal).
+- Attendance E2E (8: unauthenticated refusals, register read with date forwarding, missing/malformed/impossible dates and extra query rejection, malformed class id, save payload shaping with trimmed note, invalid payload matrix, teacher access, student refusal).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-88 tests passed against a real PostgreSQL 17 database:
+94 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
@@ -650,7 +679,8 @@ Current verified results after Phase 5 batch 2:
 - 9 class-teacher tests: primary assignment visible from both the class and teacher views with audit metadata, primary movement, soft-end/history/reassign, manager-only history (teacher list and class page with `includeEnded=true`), duplicate/archived/ineligible/missing teacher rules, teacher read-only access with student/outsider refusal, cross-workspace isolation, class delete guard and invalid payloads.
 - 10 subject tests: create with audit metadata and class counts, search/filter/pagination, duplicate name/code and invalid payloads, diffed update with archive events, delete guard and `SUBJECT_DELETED`, class subject replacement with audit counts, archived subject/class/unknown-id rules, existing archived links surviving a later archive, teacher read-only with student/outsider refusal, and cross-workspace isolation.
 - 8 class schedule tests: ordered list with audit counts, create variants with audit metadata, class overlap rejection and adjacent slots, teacher double-booking rejection, validation (range, unlinked subject, ineligible teacher), update/delete with cross-class 404s and audit, archived-class blocking with role access, and a direct DB assertion that the exclusion constraint reports `P2039`/`23P01`.
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles, class-teacher assignments, subjects, class subjects and schedule slots), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
+- 6 attendance tests: recording a register with audit metadata, corrections with only-changed audit rows and leaver history retained, validation (future date, impossible date, duplicates, withdrawn student, unknown id, zero writes), archived-class blocking with history readable, assigned-teacher writes with other-teacher/student/outsider refusal, and cross-workspace 404s.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles, class-teacher assignments, subjects, class subjects, schedule slots, attendance sessions and attendance records), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -911,10 +941,14 @@ Partially started: class records, capacity and student enrollment were delivered
 
 ## Phase 6 — Attendance
 
-- Manual attendance.
-- Attendance history.
-- Attendance summaries.
-- Reports.
+Batch 1 delivered: per-class daily registers with `PRESENT/ABSENT/LATE/EXCUSED` statuses, manager and assigned-teacher writes, editing at any time with audit events, day-by-day history on the class page, and read-only access for other staff.
+
+Still open:
+
+- Student attendance summaries (per student, across classes and date ranges).
+- Class attendance summaries (rates over a period, per student).
+- Attendance reports and exports.
+- Attendance visibility for students and parents (Phase 10 portals).
 
 ## Phase 7 — Finance
 
@@ -982,9 +1016,9 @@ Follow this order:
 1. Finish manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset.
 2. ~~Verify rate limiting and Origin checking at runtime.~~ Done November 13, 2026 — see §11.
 3. ~~Decide whether to extend email-verification enforcement beyond invitation acceptance.~~ Done November 13, 2026 — enforced for workspace creation and invitations; login and workspace switching stay open.
-4. Phase 4 batch 1 and batch 2 are delivered and pushed; Phase 5 batch 1 (subject catalogue + class links) is delivered in the AI copy, awaiting review/commit. Next: review Phase 5 batch 1, then pick between Phase 4 batch 3 weekly availability and Phase 5 timetables.
+4. Phase 4 batch 1 and batch 2 are delivered and pushed; Phase 5 batches 1–2 and Phase 6 batch 1 are delivered in the AI copy, awaiting review/commit. Next: review and commit the AI copy work, then pick between Phase 4 batch 3 weekly availability and Phase 6 attendance summaries.
 
-The Phase 2 runtime security checks, the M1 scope decision and Phase 4 batches 1–2 are closed, and Phase 5 batch 1 is implemented in the AI copy pending review. Remaining before further batches is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred guardian reuse polish.
+The Phase 2 runtime security checks, the M1 scope decision and Phase 4 batches 1–2 are closed. Phase 5 batches 1–2 and Phase 6 batch 1 are implemented in the AI copy pending review. Remaining before further batches is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred guardian reuse polish.
 
 # 17. Development Rules for AI Assistance
 
