@@ -83,6 +83,48 @@ export type AttendanceRegisterView = {
   counts: AttendanceCounts;
 };
 
+export type SummaryCounts = {
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+};
+
+export type SummaryTotals = {
+  sessions: number;
+  counts: SummaryCounts;
+  attended: number;
+  rate: number | null;
+};
+
+export type ClassAttendanceSummaryRow = SummaryTotals & {
+  studentId: string;
+  studentCode: string | null;
+  firstName: string;
+  lastName: string | null;
+  active: boolean;
+};
+
+export type ClassAttendanceSummaryView = SummaryTotals & {
+  classId: string;
+  from: string;
+  to: string;
+  students: ClassAttendanceSummaryRow[];
+};
+
+export type StudentAttendanceSummaryRow = SummaryTotals & {
+  classId: string;
+  className: string;
+  classStatus: ClassStatus;
+};
+
+export type StudentAttendanceSummaryView = SummaryTotals & {
+  studentId: string;
+  from: string;
+  to: string;
+  classes: StudentAttendanceSummaryRow[];
+};
+
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -112,6 +154,23 @@ function utcToday(): Date {
   const now = new Date();
 
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+}
+
+function parseSummaryRange(from: string, to: string) {
+  const start = parseRegisterDate(from);
+  const end = parseRegisterDate(to);
+
+  if (start.getTime() > end.getTime()) {
+    throw new BadRequestException('from must be on or before to');
+  }
+
+  const days = Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
+  if (days > 366) {
+    throw new BadRequestException('Summary range cannot exceed 366 days');
+  }
+
+  return { start, end };
 }
 
 function nullableText(value: string | null | undefined): string | null {
@@ -183,6 +242,38 @@ function tally(students: AttendanceStudentView[]): AttendanceCounts {
   }
 
   return counts;
+}
+
+function emptySummaryCounts(): SummaryCounts {
+  return { present: 0, absent: 0, late: 0, excused: 0 };
+}
+
+function addStatus(counts: SummaryCounts, status: AttendanceStatus) {
+  switch (status) {
+    case AttendanceStatus.PRESENT:
+      counts.present += 1;
+      break;
+    case AttendanceStatus.ABSENT:
+      counts.absent += 1;
+      break;
+    case AttendanceStatus.LATE:
+      counts.late += 1;
+      break;
+    default:
+      counts.excused += 1;
+  }
+}
+
+// Present and late count as attended; excused leave is left out of the
+// denominator so approved absence never lowers a rate.
+function summariseCounts(counts: SummaryCounts): { attended: number; rate: number | null } {
+  const attended = counts.present + counts.late;
+  const marked = attended + counts.absent;
+
+  return {
+    attended,
+    rate: marked === 0 ? null : Math.round((attended / marked) * 1000) / 10,
+  };
 }
 
 @Injectable()
@@ -317,6 +408,170 @@ export class AttendanceService {
     return outcome.register;
   }
 
+  async getClassSummary(
+    actorId: string,
+    workspaceId: string,
+    classId: string,
+    from: string,
+    to: string,
+  ): Promise<ClassAttendanceSummaryView> {
+    const { start, end } = parseSummaryRange(from, to);
+
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+      await this.workspaceAccess.requireRoles(actorId, workspaceId, READ_ROLES, tx);
+      await this.requireClass(tx, workspaceId, classId);
+
+      const [sessions, records, enrollments] = await Promise.all([
+        tx.attendanceSession.findMany({
+          where: { workspaceId, classId, sessionDate: { gte: start, lte: end } },
+          select: { id: true },
+        }),
+        tx.attendanceRecord.findMany({
+          where: {
+            workspaceId,
+            session: { classId, sessionDate: { gte: start, lte: end } },
+          },
+          select: {
+            studentId: true,
+            status: true,
+            student: { select: { studentCode: true, firstName: true, lastName: true } },
+          },
+        }),
+        tx.enrollment.findMany({
+          where: { workspaceId, classId, status: EnrollmentStatus.ACTIVE },
+          select: {
+            studentId: true,
+            student: { select: { studentCode: true, firstName: true, lastName: true } },
+          },
+        }),
+      ]);
+
+      const rows = new Map<string, ClassAttendanceSummaryRow>();
+
+      for (const enrollment of enrollments) {
+        rows.set(enrollment.studentId, {
+          studentId: enrollment.studentId,
+          studentCode: enrollment.student.studentCode,
+          firstName: enrollment.student.firstName,
+          lastName: enrollment.student.lastName,
+          active: true,
+          sessions: 0,
+          counts: emptySummaryCounts(),
+          attended: 0,
+          rate: null,
+        });
+      }
+
+      const counts = emptySummaryCounts();
+
+      for (const record of records) {
+        let row = rows.get(record.studentId);
+
+        if (!row) {
+          // A student who has since left the class keeps their history.
+          row = {
+            studentId: record.studentId,
+            studentCode: record.student.studentCode,
+            firstName: record.student.firstName,
+            lastName: record.student.lastName,
+            active: false,
+            sessions: 0,
+            counts: emptySummaryCounts(),
+            attended: 0,
+            rate: null,
+          };
+          rows.set(record.studentId, row);
+        }
+
+        row.sessions += 1;
+        addStatus(row.counts, record.status);
+        addStatus(counts, record.status);
+      }
+
+      const students = [...rows.values()]
+        .map((row) => ({ ...row, ...summariseCounts(row.counts) }))
+        .sort((left, right) =>
+          `${left.lastName ?? ''} ${left.firstName}`
+            .trim()
+            .localeCompare(`${right.lastName ?? ''} ${right.firstName}`.trim()),
+        );
+
+      return {
+        classId,
+        from,
+        to,
+        sessions: sessions.length,
+        counts,
+        ...summariseCounts(counts),
+        students,
+      };
+    });
+  }
+
+  async getStudentSummary(
+    actorId: string,
+    workspaceId: string,
+    studentId: string,
+    from: string,
+    to: string,
+  ): Promise<StudentAttendanceSummaryView> {
+    const { start, end } = parseSummaryRange(from, to);
+
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+      await this.workspaceAccess.requireRoles(actorId, workspaceId, READ_ROLES, tx);
+      await this.requireStudent(tx, workspaceId, studentId);
+
+      const records = await tx.attendanceRecord.findMany({
+        where: { workspaceId, studentId, session: { sessionDate: { gte: start, lte: end } } },
+        select: {
+          status: true,
+          session: {
+            select: { classId: true, class: { select: { name: true, status: true } } },
+          },
+        },
+      });
+
+      const rows = new Map<string, StudentAttendanceSummaryRow>();
+      const counts = emptySummaryCounts();
+
+      for (const record of records) {
+        const { classId } = record.session;
+        let row = rows.get(classId);
+
+        if (!row) {
+          row = {
+            classId,
+            className: record.session.class.name,
+            classStatus: record.session.class.status,
+            sessions: 0,
+            counts: emptySummaryCounts(),
+            attended: 0,
+            rate: null,
+          };
+          rows.set(classId, row);
+        }
+
+        row.sessions += 1;
+        addStatus(row.counts, record.status);
+        addStatus(counts, record.status);
+      }
+
+      const classes = [...rows.values()]
+        .map((row) => ({ ...row, ...summariseCounts(row.counts) }))
+        .sort((left, right) => left.className.localeCompare(right.className));
+
+      return {
+        studentId,
+        from,
+        to,
+        sessions: records.length,
+        counts,
+        ...summariseCounts(counts),
+        classes,
+      };
+    });
+  }
+
   private async readRegister(
     tx: Prisma.TransactionClient,
     workspaceId: string,
@@ -379,6 +634,23 @@ export class AttendanceService {
     }
 
     return schoolClass;
+  }
+
+  private async requireStudent(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    studentId: string,
+  ) {
+    const student = await tx.student.findFirst({
+      where: { id: studentId, workspaceId },
+      select: { id: true },
+    });
+
+    if (!student) {
+      throw new NotFoundException('Student not found');
+    }
+
+    return student;
   }
 
   private async requireWriter(

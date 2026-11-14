@@ -15,6 +15,7 @@ import {
 import { AssignTeacherForm } from '@/components/assign-teacher-form';
 import { AttendanceManager } from '@/components/attendance-manager';
 import { ClassActions } from '@/components/class-actions';
+import { ClassAttendanceSummary } from '@/components/class-attendance-summary';
 import { ClassSubjectForm } from '@/components/class-subject-form';
 import { ClassScheduleManager } from '@/components/class-schedule-manager';
 import { ClassTeacherActions } from '@/components/class-teacher-actions';
@@ -22,7 +23,12 @@ import { DashboardShell } from '@/components/dashboard-shell';
 import { EnrollStudentForm } from '@/components/enroll-student-form';
 import { EnrollmentActions } from '@/components/enrollment-actions';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
-import { todayInColombo, type AttendanceRegisterResponse } from '@/lib/attendance';
+import {
+  lastNDays,
+  todayInColombo,
+  type AttendanceRegisterResponse,
+  type ClassAttendanceSummaryResponse,
+} from '@/lib/attendance';
 import {
   ENROLLMENT_STATUSES,
   classCapacityLabel,
@@ -140,6 +146,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   const canManage = canManageClasses(currentWorkspace.role);
   const attendanceDate = todayInColombo();
+  const summaryRange = lastNDays(attendanceDate, 30);
 
   const rosterParams = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
 
@@ -160,6 +167,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     subjectDirectoryResponse,
     scheduleResponse,
     attendanceResponse,
+    summaryResponse,
   ] = await Promise.all([
     fetch(
       `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
@@ -201,6 +209,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
       `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/attendance?date=${attendanceDate}`,
       { headers, cache: 'no-store' },
     ),
+    fetch(
+      `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/attendance/summary?from=${summaryRange.from}&to=${summaryRange.to}`,
+      { headers, cache: 'no-store' },
+    ),
   ]);
 
   if (!rosterResponse.ok) {
@@ -223,6 +235,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     throw new Error('Unable to load the attendance register.');
   }
 
+  if (!summaryResponse.ok) {
+    throw new Error('Unable to load the attendance summary.');
+  }
+
   const roster = (await rosterResponse.json()) as EnrollmentListResponse;
   const enrolledStudentIds =
     activeResponse && activeResponse.ok
@@ -236,6 +252,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
   const classSubjects = (await classSubjectsResponse.json()) as ClassSubjectListResponse;
   const schedule = (await scheduleResponse.json()) as ClassScheduleListResponse;
   const initialAttendance = (await attendanceResponse.json()) as AttendanceRegisterResponse;
+  const initialSummary = (await summaryResponse.json()) as ClassAttendanceSummaryResponse;
   const subjectCatalogue =
     subjectDirectoryResponse && subjectDirectoryResponse.ok
       ? ((await subjectDirectoryResponse.json()) as SubjectListResponse).items
@@ -619,6 +636,29 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
             today={attendanceDate}
             initialRegister={initialAttendance}
             readOnlyReason={attendanceReadOnlyReason}
+          />
+        </div>
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Attendance summary</h2>
+            <p className="mt-1 text-sm text-slate-500">
+              Attendance rate per student for a date range.
+            </p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            Last 30 days by default
+          </span>
+        </div>
+
+        <div className="mt-4">
+          <ClassAttendanceSummary
+            workspaceId={currentWorkspace.id}
+            classId={schoolClass.id}
+            today={attendanceDate}
+            initial={initialSummary}
           />
         </div>
       </section>

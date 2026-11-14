@@ -1,4 +1,4 @@
-import { UnauthorizedException, ValidationPipe } from '@nestjs/common';
+import { BadRequestException, UnauthorizedException, ValidationPipe } from '@nestjs/common';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
@@ -22,6 +22,28 @@ const REGISTER = {
   session: null,
   students: [],
   counts: { present: 0, absent: 0, late: 0, excused: 0, unmarked: 0 },
+};
+
+const CLASS_SUMMARY = {
+  classId: CLASS_ID,
+  from: '2026-11-01',
+  to: '2026-11-30',
+  sessions: 2,
+  counts: { present: 1, absent: 1, late: 1, excused: 1 },
+  attended: 2,
+  rate: 66.7,
+  students: [],
+};
+
+const STUDENT_SUMMARY = {
+  studentId: STUDENT_ID,
+  from: '2026-11-01',
+  to: '2026-11-30',
+  sessions: 0,
+  counts: { present: 0, absent: 0, late: 0, excused: 0 },
+  attended: 0,
+  rate: null,
+  classes: [],
 };
 
 describe('Attendance API (e2e)', () => {
@@ -52,6 +74,8 @@ describe('Attendance API (e2e)', () => {
   const attendanceService = {
     getRegister: vi.fn(),
     saveRegister: vi.fn(),
+    getClassSummary: vi.fn(),
+    getStudentSummary: vi.fn(),
   };
 
   const workspaceAccessService = {
@@ -70,6 +94,8 @@ describe('Attendance API (e2e)', () => {
     workspaceAccessService.getActiveMembership.mockResolvedValue(membership);
     attendanceService.getRegister.mockResolvedValue(REGISTER);
     attendanceService.saveRegister.mockResolvedValue(REGISTER);
+    attendanceService.getClassSummary.mockResolvedValue(CLASS_SUMMARY);
+    attendanceService.getStudentSummary.mockResolvedValue(STUDENT_SUMMARY);
   });
 
   beforeAll(async () => {
@@ -241,5 +267,126 @@ describe('Attendance API (e2e)', () => {
     expect(write.status).toBe(403);
     expect(attendanceService.getRegister).not.toHaveBeenCalled();
     expect(attendanceService.saveRegister).not.toHaveBeenCalled();
+  });
+
+  describe('summaries', () => {
+    const classSummaryPath = `/api/v1/workspaces/${WORKSPACE_ID}/classes/${CLASS_ID}/attendance/summary`;
+    const studentSummaryPath = `/api/v1/workspaces/${WORKSPACE_ID}/students/${STUDENT_ID}/attendance/summary`;
+    const range = 'from=2026-11-01&to=2026-11-30';
+
+    it('rejects unauthenticated requests', async () => {
+      const classRead = await agent().get(`${classSummaryPath}?${range}`);
+      const studentRead = await agent().get(`${studentSummaryPath}?${range}`);
+
+      expect(classRead.status).toBe(401);
+      expect(studentRead.status).toBe(401);
+    });
+
+    it('returns the class summary for a range', async () => {
+      const response = await agent()
+        .get(`${classSummaryPath}?${range}`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(CLASS_SUMMARY);
+      expect(attendanceService.getClassSummary).toHaveBeenCalledWith(
+        user.id,
+        WORKSPACE_ID,
+        CLASS_ID,
+        '2026-11-01',
+        '2026-11-30',
+      );
+    });
+
+    it('returns the student summary for a range', async () => {
+      const response = await agent()
+        .get(`${studentSummaryPath}?${range}`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(STUDENT_SUMMARY);
+      expect(attendanceService.getStudentSummary).toHaveBeenCalledWith(
+        user.id,
+        WORKSPACE_ID,
+        STUDENT_ID,
+        '2026-11-01',
+        '2026-11-30',
+      );
+    });
+
+    it('rejects a missing or malformed range', async () => {
+      for (const query of [
+        '',
+        '?from=2026-11-01',
+        '?to=2026-11-30',
+        '?from=2026-02-31&to=2026-03-01',
+        '?from=01-11-2026&to=2026-11-30',
+        `?${range}&extra=1`,
+      ]) {
+        const classRead = await agent()
+          .get(`${classSummaryPath}${query}`)
+          .set('Cookie', 'edu_session=valid-session');
+        const studentRead = await agent()
+          .get(`${studentSummaryPath}${query}`)
+          .set('Cookie', 'edu_session=valid-session');
+
+        expect(classRead.status).toBe(400);
+        expect(studentRead.status).toBe(400);
+      }
+
+      expect(attendanceService.getClassSummary).not.toHaveBeenCalled();
+      expect(attendanceService.getStudentSummary).not.toHaveBeenCalled();
+    });
+
+    it('surfaces an inverted or oversized range as a 400', async () => {
+      attendanceService.getClassSummary.mockRejectedValue(
+        new BadRequestException('from must be on or before to'),
+      );
+
+      const response = await agent()
+        .get(`${classSummaryPath}?from=2026-12-01&to=2026-11-30`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(response.status).toBe(400);
+    });
+
+    it('rejects malformed ids', async () => {
+      const classRead = await agent()
+        .get(`/api/v1/workspaces/${WORKSPACE_ID}/classes/not-a-uuid/attendance/summary?${range}`)
+        .set('Cookie', 'edu_session=valid-session');
+      const studentRead = await agent()
+        .get(`/api/v1/workspaces/${WORKSPACE_ID}/students/not-a-uuid/attendance/summary?${range}`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(classRead.status).toBe(400);
+      expect(studentRead.status).toBe(400);
+      expect(attendanceService.getClassSummary).not.toHaveBeenCalled();
+      expect(attendanceService.getStudentSummary).not.toHaveBeenCalled();
+    });
+
+    it('lets teachers read summaries and blocks students', async () => {
+      workspaceAccessService.getActiveMembership.mockResolvedValue({
+        ...membership,
+        role: WorkspaceRole.TEACHER,
+      });
+
+      const teacherRead = await agent()
+        .get(`${classSummaryPath}?${range}`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(teacherRead.status).toBe(200);
+
+      workspaceAccessService.getActiveMembership.mockResolvedValue({
+        ...membership,
+        role: WorkspaceRole.STUDENT,
+      });
+
+      const studentRead = await agent()
+        .get(`${studentSummaryPath}?${range}`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(studentRead.status).toBe(403);
+      expect(attendanceService.getStudentSummary).not.toHaveBeenCalled();
+    });
   });
 });

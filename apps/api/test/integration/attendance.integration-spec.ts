@@ -112,6 +112,28 @@ describe('Attendance integration', () => {
     return date ? `${path}?date=${date}` : path;
   }
 
+  function classSummaryPath(workspaceId: string, classId: string, from: string, to: string) {
+    return `/api/v1/workspaces/${workspaceId}/classes/${classId}/attendance/summary?from=${from}&to=${to}`;
+  }
+
+  function studentSummaryPath(workspaceId: string, studentId: string, from: string, to: string) {
+    return `/api/v1/workspaces/${workspaceId}/students/${studentId}/attendance/summary?from=${from}&to=${to}`;
+  }
+
+  async function enrollExisting(
+    client: Client,
+    workspaceId: string,
+    classId: string,
+    studentId: string,
+  ) {
+    const enrollment = await post(
+      client,
+      `/workspaces/${workspaceId}/classes/${classId}/enrollments`,
+    ).send({ studentId });
+
+    expect(enrollment.status).toBe(201);
+  }
+
   it('records a daily register and returns it with the active roster', async () => {
     const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
@@ -448,5 +470,293 @@ describe('Attendance integration', () => {
     expect(
       await context.prisma.attendanceSession.count({ where: { workspaceId: workspace.id } }),
     ).toBe(1);
+  });
+
+  it('summarises a class range with present and late attended and excused excluded', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const schoolClass = await createClass(owner.client, workspace.id);
+    const amara = await enrollStudent(owner.client, workspace.id, schoolClass.id, 'Amara');
+    const binod = await enrollStudent(owner.client, workspace.id, schoolClass.id, 'Binod');
+    const path = attendancePath(workspace.id, schoolClass.id);
+
+    const days: Array<[string, Array<{ studentId: string; status: string }>]> = [
+      [
+        '2026-11-02',
+        [
+          { studentId: amara.student.id, status: 'PRESENT' },
+          { studentId: binod.student.id, status: 'ABSENT' },
+        ],
+      ],
+      [
+        '2026-11-03',
+        [
+          { studentId: amara.student.id, status: 'LATE' },
+          { studentId: binod.student.id, status: 'PRESENT' },
+        ],
+      ],
+      [
+        '2026-11-04',
+        [
+          { studentId: amara.student.id, status: 'EXCUSED' },
+          { studentId: binod.student.id, status: 'PRESENT' },
+        ],
+      ],
+    ];
+
+    for (const [date, records] of days) {
+      await put(owner.client, path).send({ date, records }).expect(200);
+    }
+
+    const summary = await owner.client.get(
+      classSummaryPath(workspace.id, schoolClass.id, '2026-11-01', '2026-11-30'),
+    );
+
+    expect(summary.status).toBe(200);
+    expect(summary.body).toMatchObject({
+      classId: schoolClass.id,
+      from: '2026-11-01',
+      to: '2026-11-30',
+      sessions: 3,
+      counts: { present: 3, absent: 1, late: 1, excused: 1 },
+      attended: 4,
+      rate: 80,
+    });
+    expect(
+      summary.body.students.map(
+        (student: {
+          firstName: string;
+          active: boolean;
+          sessions: number;
+          counts: Record<string, number>;
+          rate: number | null;
+        }) => [student.firstName, student.active, student.sessions, student.counts, student.rate],
+      ),
+    ).toEqual([
+      ['Amara', true, 3, { present: 1, absent: 0, late: 1, excused: 1 }, 100],
+      ['Binod', true, 3, { present: 2, absent: 1, late: 0, excused: 0 }, 66.7],
+    ]);
+
+    const narrow = await owner.client.get(
+      classSummaryPath(workspace.id, schoolClass.id, '2026-11-03', '2026-11-03'),
+    );
+
+    expect(narrow.body).toMatchObject({
+      sessions: 1,
+      counts: { present: 1, absent: 0, late: 1, excused: 0 },
+      attended: 2,
+      rate: 100,
+    });
+
+    const outOfRange = await owner.client.get(
+      classSummaryPath(workspace.id, schoolClass.id, '2026-10-01', '2026-10-31'),
+    );
+
+    expect(outOfRange.body).toMatchObject({ sessions: 0, attended: 0, rate: null });
+    expect(
+      outOfRange.body.students.every(
+        (student: { sessions: number; rate: number | null }) =>
+          student.sessions === 0 && student.rate === null,
+      ),
+    ).toBe(true);
+  });
+
+  it('keeps a leaver in the class summary but marks the row inactive', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const schoolClass = await createClass(owner.client, workspace.id);
+    const amara = await enrollStudent(owner.client, workspace.id, schoolClass.id, 'Amara');
+    const binod = await enrollStudent(owner.client, workspace.id, schoolClass.id, 'Binod');
+    const path = attendancePath(workspace.id, schoolClass.id);
+
+    await put(owner.client, path)
+      .send({
+        date: REGISTER_DATE,
+        records: [
+          { studentId: amara.student.id, status: 'PRESENT' },
+          { studentId: binod.student.id, status: 'ABSENT' },
+        ],
+      })
+      .expect(200);
+
+    await patch(owner.client, `/workspaces/${workspace.id}/enrollments/${binod.enrollment.id}`)
+      .send({ status: 'WITHDRAWN' })
+      .expect(200);
+
+    const summary = await owner.client.get(
+      classSummaryPath(workspace.id, schoolClass.id, REGISTER_DATE, REGISTER_DATE),
+    );
+
+    expect(summary.status).toBe(200);
+    expect(summary.body.sessions).toBe(1);
+    expect(summary.body.counts).toEqual({ present: 1, absent: 1, late: 0, excused: 0 });
+    expect(
+      summary.body.students.map(
+        (student: {
+          firstName: string;
+          active: boolean;
+          sessions: number;
+          rate: number | null;
+        }) => [student.firstName, student.active, student.sessions, student.rate],
+      ),
+    ).toEqual([
+      ['Amara', true, 1, 100],
+      ['Binod', false, 1, 0],
+    ]);
+  });
+
+  it('summarises a student across classes', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const science = await createClass(owner.client, workspace.id, 'Grade 8 Science');
+    const maths = await createClass(owner.client, workspace.id, 'Grade 9 Maths');
+    const student = await enrollStudent(owner.client, workspace.id, science.id, 'Amara');
+
+    await enrollExisting(owner.client, workspace.id, maths.id, student.student.id);
+    await put(owner.client, attendancePath(workspace.id, science.id))
+      .send({
+        date: REGISTER_DATE,
+        records: [{ studentId: student.student.id, status: 'PRESENT' }],
+      })
+      .expect(200);
+    await put(owner.client, attendancePath(workspace.id, science.id))
+      .send({ date: '2026-11-11', records: [{ studentId: student.student.id, status: 'ABSENT' }] })
+      .expect(200);
+    await put(owner.client, attendancePath(workspace.id, maths.id))
+      .send({ date: REGISTER_DATE, records: [{ studentId: student.student.id, status: 'LATE' }] })
+      .expect(200);
+
+    const summary = await owner.client.get(
+      studentSummaryPath(workspace.id, student.student.id, '2026-11-01', '2026-11-30'),
+    );
+
+    expect(summary.status).toBe(200);
+    expect(summary.body).toMatchObject({
+      studentId: student.student.id,
+      from: '2026-11-01',
+      to: '2026-11-30',
+      sessions: 3,
+      counts: { present: 1, absent: 1, late: 1, excused: 0 },
+      attended: 2,
+      rate: 66.7,
+    });
+    expect(
+      summary.body.classes.map(
+        (row: {
+          className: string;
+          classStatus: string;
+          sessions: number;
+          rate: number | null;
+        }) => [row.className, row.classStatus, row.sessions, row.rate],
+      ),
+    ).toEqual([
+      ['Grade 8 Science', 'ACTIVE', 2, 50],
+      ['Grade 9 Maths', 'ACTIVE', 1, 100],
+    ]);
+  });
+
+  it('validates summary ranges', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const schoolClass = await createClass(owner.client, workspace.id);
+    const amara = await enrollStudent(owner.client, workspace.id, schoolClass.id, 'Amara');
+    const base = `/api/v1/workspaces/${workspace.id}/classes/${schoolClass.id}/attendance/summary`;
+
+    for (const query of [
+      '',
+      '?from=2026-11-01',
+      '?to=2026-11-30',
+      '?from=2026-02-31&to=2026-03-01',
+    ]) {
+      expect((await owner.client.get(`${base}${query}`)).status).toBe(400);
+    }
+
+    expect(
+      (
+        await owner.client.get(
+          classSummaryPath(workspace.id, schoolClass.id, '2026-12-01', '2026-11-30'),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await owner.client.get(
+          classSummaryPath(workspace.id, schoolClass.id, '2025-01-01', '2026-11-30'),
+        )
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await owner.client.get(
+          studentSummaryPath(workspace.id, amara.student.id, '2026-12-01', '2026-11-30'),
+        )
+      ).status,
+    ).toBe(400);
+
+    expect(await context.prisma.attendanceSession.count()).toBe(0);
+  });
+
+  it('scopes summaries to the reader role and the workspace', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const teacher = await addMember(owner.client, workspace.id, 'teacher@example.com');
+    const studentMember = await addMember(
+      owner.client,
+      workspace.id,
+      'student@example.com',
+      'STUDENT',
+    );
+    const schoolClass = await createClass(owner.client, workspace.id);
+    const amara = await enrollStudent(owner.client, workspace.id, schoolClass.id, 'Amara');
+
+    await put(owner.client, attendancePath(workspace.id, schoolClass.id))
+      .send({ date: REGISTER_DATE, records: [{ studentId: amara.student.id, status: 'PRESENT' }] })
+      .expect(200);
+
+    const teacherClass = await teacher.client.get(
+      classSummaryPath(workspace.id, schoolClass.id, REGISTER_DATE, REGISTER_DATE),
+    );
+    const teacherStudent = await teacher.client.get(
+      studentSummaryPath(workspace.id, amara.student.id, REGISTER_DATE, REGISTER_DATE),
+    );
+
+    expect(teacherClass.status).toBe(200);
+    expect(teacherStudent.status).toBe(200);
+
+    expect(
+      (
+        await studentMember.client.get(
+          classSummaryPath(workspace.id, schoolClass.id, REGISTER_DATE, REGISTER_DATE),
+        )
+      ).status,
+    ).toBe(403);
+
+    const outsider = await registerVerifiedUser(context, 'outsider@example.com');
+
+    expect(
+      (
+        await outsider.client.get(
+          classSummaryPath(workspace.id, schoolClass.id, REGISTER_DATE, REGISTER_DATE),
+        )
+      ).status,
+    ).toBe(403);
+
+    const other = await registerVerifiedUser(context, 'other@example.com');
+    const otherWorkspace = await createWorkspace(other.client, 'Other', 'INSTITUTE');
+
+    expect(
+      (
+        await other.client.get(
+          classSummaryPath(otherWorkspace.id, schoolClass.id, REGISTER_DATE, REGISTER_DATE),
+        )
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await other.client.get(
+          studentSummaryPath(otherWorkspace.id, amara.student.id, REGISTER_DATE, REGISTER_DATE),
+        )
+      ).status,
+    ).toBe(404);
   });
 });

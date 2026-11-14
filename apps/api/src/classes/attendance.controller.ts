@@ -18,6 +18,7 @@ import { WorkspaceRole } from '../generated/prisma/client.js';
 import { WorkspaceRoles } from '../workspaces/workspace-roles.decorator.js';
 import { WorkspaceRolesGuard } from '../workspaces/workspace-roles.guard.js';
 import { AttendanceService } from './attendance.service.js';
+import { GetAttendanceSummaryQueryDto } from './dto/get-attendance-summary.query.js';
 import { GetAttendanceQueryDto } from './dto/get-attendance.query.js';
 import { SaveAttendanceDto } from './dto/save-attendance.dto.js';
 
@@ -36,6 +37,42 @@ export class AttendanceController {
     query: GetAttendanceQueryDto,
   ) {
     return this.attendanceService.getRegister(user.id, workspaceId, classId, query.date);
+  }
+
+  @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)
+  @Get('classes/:classId/attendance/summary')
+  getClassSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('classId', ParseUUIDPipe) classId: string,
+    @Query(new ValidationPipe({ expectedType: GetAttendanceSummaryQueryDto, transform: true }))
+    query: GetAttendanceSummaryQueryDto,
+  ) {
+    return this.attendanceService.getClassSummary(
+      user.id,
+      workspaceId,
+      classId,
+      query.from,
+      query.to,
+    );
+  }
+
+  @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)
+  @Get('students/:studentId/attendance/summary')
+  getStudentSummary(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Param('studentId', ParseUUIDPipe) studentId: string,
+    @Query(new ValidationPipe({ expectedType: GetAttendanceSummaryQueryDto, transform: true }))
+    query: GetAttendanceSummaryQueryDto,
+  ) {
+    return this.attendanceService.getStudentSummary(
+      user.id,
+      workspaceId,
+      studentId,
+      query.from,
+      query.to,
+    );
   }
 
   @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)

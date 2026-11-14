@@ -1,3 +1,5 @@
+import type { ClassStatus } from './classes';
+
 export const ATTENDANCE_STATUSES = ['PRESENT', 'ABSENT', 'LATE', 'EXCUSED'] as const;
 
 export type AttendanceStatus = (typeof ATTENDANCE_STATUSES)[number];
@@ -56,6 +58,50 @@ export type AttendanceRegisterResponse = {
   counts: AttendanceCounts;
 };
 
+export type AttendanceSummaryCounts = {
+  present: number;
+  absent: number;
+  late: number;
+  excused: number;
+};
+
+export type AttendanceSummaryTotals = {
+  sessions: number;
+  counts: AttendanceSummaryCounts;
+  attended: number;
+  rate: number | null;
+};
+
+export type ClassAttendanceSummaryRow = AttendanceSummaryTotals & {
+  studentId: string;
+  studentCode: string | null;
+  firstName: string;
+  lastName: string | null;
+  active: boolean;
+};
+
+export type ClassAttendanceSummaryResponse = AttendanceSummaryTotals & {
+  classId: string;
+  from: string;
+  to: string;
+  students: ClassAttendanceSummaryRow[];
+};
+
+export type StudentAttendanceSummaryRow = AttendanceSummaryTotals & {
+  classId: string;
+  className: string;
+  classStatus: ClassStatus;
+};
+
+export type StudentAttendanceSummaryResponse = AttendanceSummaryTotals & {
+  studentId: string;
+  from: string;
+  to: string;
+  classes: StudentAttendanceSummaryRow[];
+};
+
+export const SUMMARY_RANGE_PRESETS = [7, 30, 90] as const;
+
 // The app formats dates in Colombo time, so "today" follows the same zone.
 const DATE_INPUT_FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Asia/Colombo',
@@ -66,6 +112,42 @@ const DATE_INPUT_FORMATTER = new Intl.DateTimeFormat('en-CA', {
 
 export function todayInColombo(): string {
   return DATE_INPUT_FORMATTER.format(new Date());
+}
+
+export function shiftCalendarDate(date: string, days: number): string {
+  const parts = date.split('-').map(Number);
+  const shifted = new Date(Date.UTC(parts[0] ?? 1970, (parts[1] ?? 1) - 1, (parts[2] ?? 1) + days));
+
+  return shifted.toISOString().slice(0, 10);
+}
+
+// The API returns an inclusive range, so 30 days back is today minus 29.
+export function lastNDays(today: string, days: number): { from: string; to: string } {
+  return { from: shiftCalendarDate(today, -(days - 1)), to: today };
+}
+
+export function formatAttendanceRate(rate: number | null): string {
+  return rate === null ? '—' : `${rate}%`;
+}
+
+export function attendanceRateClasses(rate: number | null): string {
+  if (rate === null) {
+    return 'bg-slate-100 text-slate-500';
+  }
+
+  if (rate >= 90) {
+    return 'bg-emerald-50 text-emerald-700';
+  }
+
+  if (rate >= 75) {
+    return 'bg-blue-50 text-blue-700';
+  }
+
+  if (rate >= 50) {
+    return 'bg-amber-50 text-amber-700';
+  }
+
+  return 'bg-red-50 text-red-700';
 }
 
 export function tallyAttendance(

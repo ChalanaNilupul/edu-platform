@@ -99,9 +99,11 @@ describe('AttendanceService', () => {
   const tx = {
     class: { findFirst: vi.fn() },
     classTeacher: { findFirst: vi.fn() },
+    student: { findFirst: vi.fn() },
     enrollment: { findMany: vi.fn() },
     attendanceSession: {
       findFirst: vi.fn(),
+      findMany: vi.fn(),
       findUnique: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
@@ -164,6 +166,12 @@ describe('AttendanceService', () => {
       teacherAssigned ? { id: 'assignment-1' } : null,
     );
 
+    tx.student.findFirst.mockImplementation(async ({ where }: { where?: { id?: string } }) =>
+      where?.id === STUDENT_ONE || where?.id === STUDENT_TWO ? { id: where.id } : null,
+    );
+
+    tx.attendanceSession.findMany.mockResolvedValue([]);
+
     tx.enrollment.findMany.mockImplementation(
       async ({ where }: { where?: { studentId?: { in?: string[] } } }) => {
         if (where?.studentId?.in) {
@@ -172,7 +180,9 @@ describe('AttendanceService', () => {
             .map((studentId) => ({ studentId }));
         }
 
-        return roster.filter(({ student }) => enrolledStudentIds.has(student.id));
+        return roster
+          .filter(({ student }) => enrolledStudentIds.has(student.id))
+          .map(({ student }) => ({ studentId: student.id, student }));
       },
     );
 
@@ -560,6 +570,230 @@ describe('AttendanceService', () => {
         studentId: STUDENT_TWO,
         status: AttendanceStatus.ABSENT,
       });
+    });
+  });
+
+  describe('getClassSummary', () => {
+    const amara = { studentCode: 'S-001', firstName: 'Amara', lastName: 'Silva' };
+    const binod = { studentCode: 'S-002', firstName: 'Binod', lastName: 'Fernando' };
+
+    it('rates present and late as attended and leaves excused out', async () => {
+      tx.attendanceSession.findMany.mockResolvedValue([{ id: 'session-1' }, { id: 'session-2' }]);
+      tx.attendanceRecord.findMany.mockResolvedValue([
+        { studentId: STUDENT_ONE, status: AttendanceStatus.PRESENT, student: amara },
+        { studentId: STUDENT_ONE, status: AttendanceStatus.LATE, student: amara },
+        { studentId: STUDENT_TWO, status: AttendanceStatus.ABSENT, student: binod },
+        { studentId: STUDENT_TWO, status: AttendanceStatus.EXCUSED, student: binod },
+      ]);
+
+      const summary = await service.getClassSummary(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        CLASS_ID,
+        '2026-11-01',
+        '2026-11-30',
+      );
+
+      expect(summary).toMatchObject({
+        classId: CLASS_ID,
+        from: '2026-11-01',
+        to: '2026-11-30',
+        sessions: 2,
+        counts: { present: 1, absent: 1, late: 1, excused: 1 },
+        attended: 2,
+        rate: 66.7,
+      });
+      expect(
+        summary.students.map((student) => [
+          student.studentId,
+          student.active,
+          student.sessions,
+          student.rate,
+        ]),
+      ).toEqual([
+        [STUDENT_TWO, true, 2, 0],
+        [STUDENT_ONE, true, 2, 100],
+      ]);
+      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        [WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER],
+        tx,
+      );
+      expect(tx.attendanceRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            workspaceId: WORKSPACE_ID,
+            session: {
+              classId: CLASS_ID,
+              sessionDate: { gte: expect.any(Date), lte: expect.any(Date) },
+            },
+          },
+        }),
+      );
+    });
+
+    it('lists students who have left the class as inactive', async () => {
+      enrolledStudentIds = new Set([STUDENT_ONE]);
+      tx.attendanceSession.findMany.mockResolvedValue([{ id: 'session-1' }]);
+      tx.attendanceRecord.findMany.mockResolvedValue([
+        { studentId: STUDENT_ONE, status: AttendanceStatus.PRESENT, student: amara },
+        { studentId: STUDENT_TWO, status: AttendanceStatus.PRESENT, student: binod },
+      ]);
+
+      const summary = await service.getClassSummary(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        CLASS_ID,
+        '2026-11-01',
+        '2026-11-30',
+      );
+
+      expect(
+        summary.students.map((student) => [student.studentId, student.active, student.rate]),
+      ).toEqual([
+        [STUDENT_TWO, false, 100],
+        [STUDENT_ONE, true, 100],
+      ]);
+    });
+
+    it('returns active students with null rates when no register was saved', async () => {
+      const summary = await service.getClassSummary(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        CLASS_ID,
+        '2026-11-01',
+        '2026-11-30',
+      );
+
+      expect(summary.sessions).toBe(0);
+      expect(summary.rate).toBeNull();
+      expect(summary.students.map((student) => [student.sessions, student.rate])).toEqual([
+        [0, null],
+        [0, null],
+      ]);
+    });
+
+    it('rejects an inverted or oversized range before touching the tenant', async () => {
+      await expect(
+        service.getClassSummary(ACTOR_ID, WORKSPACE_ID, CLASS_ID, '2026-12-01', '2026-11-30'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      await expect(
+        service.getClassSummary(ACTOR_ID, WORKSPACE_ID, CLASS_ID, '2025-01-01', '2026-11-30'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(tenantMock.runAsTenant).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 when the class does not exist', async () => {
+      classExists = false;
+
+      await expect(
+        service.getClassSummary(ACTOR_ID, WORKSPACE_ID, CLASS_ID, '2026-11-01', '2026-11-30'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('getStudentSummary', () => {
+    it('groups marks by class and applies the same rate rule', async () => {
+      tx.attendanceRecord.findMany.mockResolvedValue([
+        {
+          status: AttendanceStatus.PRESENT,
+          session: {
+            classId: 'class-maths',
+            class: { name: 'Mathematics', status: ClassStatus.ACTIVE },
+          },
+        },
+        {
+          status: AttendanceStatus.ABSENT,
+          session: {
+            classId: 'class-maths',
+            class: { name: 'Mathematics', status: ClassStatus.ACTIVE },
+          },
+        },
+        {
+          status: AttendanceStatus.LATE,
+          session: {
+            classId: 'class-science',
+            class: { name: 'Science', status: ClassStatus.ARCHIVED },
+          },
+        },
+        {
+          status: AttendanceStatus.EXCUSED,
+          session: {
+            classId: 'class-science',
+            class: { name: 'Science', status: ClassStatus.ARCHIVED },
+          },
+        },
+      ]);
+
+      const summary = await service.getStudentSummary(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        STUDENT_ONE,
+        '2026-11-01',
+        '2026-11-30',
+      );
+
+      expect(summary).toMatchObject({
+        studentId: STUDENT_ONE,
+        from: '2026-11-01',
+        to: '2026-11-30',
+        sessions: 4,
+        counts: { present: 1, absent: 1, late: 1, excused: 1 },
+        attended: 2,
+        rate: 66.7,
+      });
+      expect(summary.classes).toEqual([
+        {
+          classId: 'class-maths',
+          className: 'Mathematics',
+          classStatus: ClassStatus.ACTIVE,
+          sessions: 2,
+          counts: { present: 1, absent: 1, late: 0, excused: 0 },
+          attended: 1,
+          rate: 50,
+        },
+        {
+          classId: 'class-science',
+          className: 'Science',
+          classStatus: ClassStatus.ARCHIVED,
+          sessions: 2,
+          counts: { present: 0, absent: 0, late: 1, excused: 1 },
+          attended: 1,
+          rate: 100,
+        },
+      ]);
+      expect(tx.attendanceRecord.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            workspaceId: WORKSPACE_ID,
+            studentId: STUDENT_ONE,
+            session: { sessionDate: { gte: expect.any(Date), lte: expect.any(Date) } },
+          },
+        }),
+      );
+    });
+
+    it('returns an empty summary when the student has no marks in range', async () => {
+      const summary = await service.getStudentSummary(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        STUDENT_ONE,
+        '2026-11-01',
+        '2026-11-30',
+      );
+
+      expect(summary).toMatchObject({ sessions: 0, rate: null, classes: [] });
+    });
+
+    it('returns 404 when the student is not in the workspace', async () => {
+      tx.student.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.getStudentSummary(ACTOR_ID, WORKSPACE_ID, STUDENT_ONE, '2026-11-01', '2026-11-30'),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

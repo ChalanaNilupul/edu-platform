@@ -5,7 +5,9 @@ import { ArrowLeft, Pencil, Plus } from 'lucide-react';
 
 import { DashboardShell } from '@/components/dashboard-shell';
 import { GuardianActions } from '@/components/guardian-actions';
+import { StudentAttendanceSummary } from '@/components/student-attendance-summary';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
+import { lastNDays, todayInColombo, type StudentAttendanceSummaryResponse } from '@/lib/attendance';
 import {
   enrollmentStatusClasses,
   enrollmentStatusLabels,
@@ -126,6 +128,19 @@ export default async function StudentDetailPage({ params }: StudentPageProps) {
   }
 
   const enrollments = (await enrollmentsResponse.json()) as EnrollmentRecord[];
+
+  const attendanceToday = todayInColombo();
+  const summaryRange = lastNDays(attendanceToday, 30);
+  const summaryResponse = await fetch(
+    `${apiUrl}/workspaces/${workspace.id}/students/${studentId}/attendance/summary?from=${summaryRange.from}&to=${summaryRange.to}`,
+    { headers, cache: 'no-store' },
+  );
+
+  if (!summaryResponse.ok) {
+    throw new Error('Unable to load the student attendance summary.');
+  }
+
+  const initialSummary = (await summaryResponse.json()) as StudentAttendanceSummaryResponse;
 
   const canManage = canManageStudents(workspace.role);
   const address = [
@@ -335,6 +350,30 @@ export default async function StudentDetailPage({ params }: StudentPageProps) {
               ))}
             </ul>
           )}
+        </section>
+
+        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">Attendance summary</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Attendance rate across {student.firstName}&apos;s classes.
+              </p>
+            </div>
+            <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+              Last 30 days by default
+            </span>
+          </div>
+
+          <div className="mt-4">
+            <StudentAttendanceSummary
+              workspaceId={workspace.id}
+              studentId={student.id}
+              studentName={student.firstName}
+              today={attendanceToday}
+              initial={initialSummary}
+            />
+          </div>
         </section>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">

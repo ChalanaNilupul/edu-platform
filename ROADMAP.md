@@ -4,7 +4,7 @@ Last updated: November 14, 2026
 
 ## Project Status
 
-**Current Phase: Phase 6 — Attendance Management (batch 1 delivered)**
+**Current Phase: Phase 6 — Attendance Management (batches 1–2 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -417,7 +417,7 @@ Verified: 260 unit tests, 110 mocked HTTP E2E tests, 88 real-database integratio
 
 # Phase 6 — Attendance Management
 
-**Status: In progress — batch 1 (daily register API and class-page UI) delivered**
+**Status: In progress — batch 1 (daily register API and class-page UI) and batch 2 (class and student summaries) delivered**
 
 ### Daily register notes (November 14, 2026)
 
@@ -434,12 +434,27 @@ Attendance is stored per class per day: one `attendance_sessions` row per `(clas
 
 Verified: 276 unit tests, 118 mocked HTTP E2E tests, 94 real-database integration tests (including RLS on `attendance_sessions` and `attendance_records`), typecheck, lint, format, API build, `next build` and a browser walkthrough (mark and save a register, correct an excusal, confirm an earlier day is empty, restore the saved day, and confirm the read-only view for a teacher who is not assigned to the class).
 
+### Class and student summaries notes (November 14, 2026)
+
+Summaries are computed on read from the stored registers — no new tables or migration. Two routes under `/workspaces/:workspaceId`, readable by OWNER/ADMIN/BRANCH_MANAGER/TEACHER:
+
+- `GET /classes/:classId/attendance/summary?from=YYYY-MM-DD&to=YYYY-MM-DD` — sessions and status counts for the class in the range, plus one row per student who was enrolled in that period: session count, status counts, attended count and rate. Active enrollments seed the rows (so a student with no marks shows zeroes and a null rate), and students who have since left keep their history as `active: false` rows. Rows are sorted by name.
+- `GET /students/:studentId/attendance/summary?from=YYYY-MM-DD&to=YYYY-MM-DD` — the same totals grouped by class, with class name and status; returns 404 when the student is not in the workspace.
+
+Rate rule: present and late marks count as attended; excused marks are excluded from the denominator, so approved leave never lowers a rate. `rate = (present + late) / (present + absent + late)`, rounded to one decimal and `null` when no mark in the range counts (for example, only excused marks). Unmarked days have no record, so they are never counted either way.
+
+The range is inclusive `from`/`to`, must be real `YYYY-MM-DD` calendar days, must not be inverted and is capped at 366 days (400 otherwise). The API has no default range; the web UI defaults to the last 30 days and offers 7/30/90-day presets plus explicit dates.
+
+Web UI: an Attendance summary card on the class detail page (totals, class rate, per-student table with a "Left class" marker for leavers) and on the student detail page (totals, attendance rate, per-class table). Both use the shared range picker and refetch client-side without reloading the page.
+
+Verified: 284 unit tests, 125 mocked HTTP E2E tests, 99 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough (three saved registers across two students, class summary totals and rates, a 7-day preset, a narrow custom range and the student summary across the same class).
+
 - [x] Implement daily attendance.
 - [x] Implement manual attendance recording.
 - [x] Implement attendance editing.
 - [x] Implement attendance history (day-by-day register viewing).
-- [ ] Implement student attendance summaries.
-- [ ] Implement class attendance summaries.
+- [x] Implement student attendance summaries.
+- [x] Implement class attendance summaries.
 - [ ] Implement attendance reports.
 
 # Phase 7 — Finance and Fee Management
