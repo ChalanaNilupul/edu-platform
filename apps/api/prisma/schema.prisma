@@ -108,6 +108,17 @@ enum PaymentMethod {
   BANK
 }
 
+enum LessonStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum MaterialKind {
+  PDF
+  VIDEO
+  LINK
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -160,6 +171,12 @@ enum AuditEventType {
   STUDENT_FEE_VOIDED
   PAYMENT_RECORDED
   PAYMENT_DELETED
+  LESSON_CREATED
+  LESSON_UPDATED
+  LESSON_DELETED
+  LESSON_MATERIAL_CREATED
+  LESSON_MATERIAL_UPDATED
+  LESSON_MATERIAL_DELETED
 }
 
 model User {
@@ -208,6 +225,8 @@ model Workspace {
   studentFees        StudentFee[]
   payments           Payment[]
   counters           WorkspaceCounter[]
+  lessons            Lesson[]
+  lessonMaterials    LessonMaterial[]
   activeSessions     Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -309,6 +328,7 @@ model Class {
   attendanceSessions AttendanceSession[]
   feePlans           FeePlan[]
   fees               StudentFee[]
+  lessons            Lesson[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -375,6 +395,7 @@ model Subject {
   workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   classLinks ClassSubject[]
   schedule   ClassScheduleSlot[]
+  lessons    Lesson[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, code])
@@ -423,6 +444,52 @@ model ClassScheduleSlot {
   @@index([workspaceId, classId, dayOfWeek, startMinutes], map: "class_schedule_slots_class_time_idx")
   @@index([workspaceId, membershipId, dayOfWeek, startMinutes], map: "class_schedule_slots_teacher_time_idx")
   @@map("class_schedule_slots")
+}
+
+/// One planned teaching session for a class. Draft lessons are still being
+/// prepared; publishing is a status change, so nothing is ever lost.
+model Lesson {
+  id                    String       @id @default(uuid())
+  workspaceId           String       @map("workspace_id")
+  classId               String       @map("class_id")
+  subjectId             String?      @map("subject_id")
+  title                 String
+  description           String?
+  lessonDate            DateTime     @map("lesson_date") @db.Date
+  status                LessonStatus @default(DRAFT)
+  createdByMembershipId String?      @map("created_by_membership_id")
+  createdAt             DateTime     @default(now()) @map("created_at")
+  updatedAt             DateTime     @updatedAt @map("updated_at")
+
+  workspace  Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  class      Class            @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject    Subject?         @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  createdBy  Membership?      @relation("LessonCreatedBy", fields: [createdByMembershipId], references: [id], onDelete: SetNull)
+  materials  LessonMaterial[]
+
+  @@index([workspaceId, classId, lessonDate])
+  @@index([workspaceId, status])
+  @@map("lessons")
+}
+
+/// An external PDF, video or link attached to a lesson. Files are not hosted
+/// yet, so each material stores an http(s) URL.
+model LessonMaterial {
+  id          String       @id @default(uuid())
+  workspaceId String       @map("workspace_id")
+  lessonId    String       @map("lesson_id")
+  title       String
+  kind        MaterialKind
+  url         String
+  description String?
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  lesson    Lesson    @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, lessonId])
+  @@map("lesson_materials")
 }
 
 /// One register per class per calendar day. A session only exists once a
@@ -583,6 +650,7 @@ model Membership {
   attendanceSessions AttendanceSession[]
   createdFees        StudentFee[]        @relation("StudentFeeCreatedBy")
   recordedPayments   Payment[]           @relation("PaymentRecordedBy")
+  createdLessons     Lesson[]            @relation("LessonCreatedBy")
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])

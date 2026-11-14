@@ -10,6 +10,7 @@ import { ClassesModule } from './classes/classes.module.js';
 import { FinanceModule } from './finance/finance.module.js';
 import { GuardiansModule } from './guardians/guardians.module.js';
 import { HealthModule } from './health/health.module.js';
+import { LessonsModule } from './lessons/lessons.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { StudentsModule } from './students/students.module.js';
 import { SubjectsModule } from './subjects/subjects.module.js';
@@ -47,6 +48,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     ClassesModule,
     TeachersModule,
     SubjectsModule,
+    LessonsModule,
     FinanceModule,
   ],
   providers: [

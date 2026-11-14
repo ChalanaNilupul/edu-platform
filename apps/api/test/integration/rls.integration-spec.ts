@@ -90,10 +90,14 @@ const feeA = randomUUID();
 const feeB = randomUUID();
 const paymentA = randomUUID();
 const paymentB = randomUUID();
+const lessonA = randomUUID();
+const lessonB = randomUUID();
+const materialA = randomUUID();
+const materialB = randomUUID();
 
 async function seed() {
   await query(
-    'TRUNCATE TABLE "workspace_counters", "payments", "student_fees", "fee_plans", "attendance_records", "attendance_sessions", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "lesson_materials", "lessons", "workspace_counters", "payments", "student_fees", "fee_plans", "attendance_records", "attendance_sessions", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
   );
 
   const now = new Date().toISOString();
@@ -332,6 +336,37 @@ async function seed() {
      VALUES ($1, 'payment_receipt', 1), ($2, 'payment_receipt', 1)`,
     [workspaceA, workspaceB],
   );
+
+  await query(
+    `INSERT INTO "lessons"
+       ("id", "workspace_id", "class_id", "subject_id", "title", "lesson_date", "status",
+        "created_by_membership_id", "created_at", "updated_at")
+     VALUES
+       ($1, $2, $3, $4, 'Fractions', CURRENT_DATE, 'PUBLISHED', $7, $8, $8),
+       ($5, $6, $9, $10, 'Photosynthesis', CURRENT_DATE, 'DRAFT', $11, $8, $8)`,
+    [
+      lessonA,
+      workspaceA,
+      classA,
+      subjectA,
+      lessonB,
+      workspaceB,
+      membershipA2,
+      now,
+      classB,
+      subjectB,
+      membershipB1,
+    ],
+  );
+
+  await query(
+    `INSERT INTO "lesson_materials"
+       ("id", "workspace_id", "lesson_id", "title", "kind", "url", "created_at", "updated_at")
+     VALUES
+       ($1, $2, $3, 'Fractions worksheet', 'PDF', 'https://example.com/fractions.pdf', $6, $6),
+       ($4, $5, $7, 'Photosynthesis video', 'VIDEO', 'https://example.com/photosynthesis', $6, $6)`,
+    [materialA, workspaceA, lessonA, materialB, workspaceB, now, lessonB],
+  );
 }
 
 beforeAll(async () => {
@@ -367,6 +402,8 @@ describe('Row level security on tenant tables', () => {
       const fees = await query('SELECT * FROM "student_fees"');
       const payments = await query('SELECT * FROM "payments"');
       const counters = await query('SELECT * FROM "workspace_counters"');
+      const lessons = await query('SELECT * FROM "lessons"');
+      const materials = await query('SELECT * FROM "lesson_materials"');
 
       expect(memberships.rowCount).toBe(0);
       expect(invitations.rowCount).toBe(0);
@@ -385,6 +422,8 @@ describe('Row level security on tenant tables', () => {
       expect(fees.rowCount).toBe(0);
       expect(payments.rowCount).toBe(0);
       expect(counters.rowCount).toBe(0);
+      expect(lessons.rowCount).toBe(0);
+      expect(materials.rowCount).toBe(0);
     });
   });
 
@@ -411,6 +450,8 @@ describe('Row level security on tenant tables', () => {
       const fees = await query('SELECT "id", "workspace_id" FROM "student_fees"');
       const payments = await query('SELECT "id", "workspace_id" FROM "payments"');
       const counters = await query('SELECT "workspace_id" FROM "workspace_counters"');
+      const lessons = await query('SELECT "id", "workspace_id" FROM "lessons"');
+      const materials = await query('SELECT "id", "workspace_id" FROM "lesson_materials"');
 
       expect(memberships.rowCount).toBe(2);
       expect(memberships.rows.every((row) => row.workspace_id === workspaceA)).toBe(true);
@@ -430,6 +471,8 @@ describe('Row level security on tenant tables', () => {
       expect(fees.rows.map((row) => row.id)).toEqual([feeA]);
       expect(payments.rows.map((row) => row.id)).toEqual([paymentA]);
       expect(counters.rows).toEqual([{ workspace_id: workspaceA }]);
+      expect(lessons.rows.map((row) => row.id)).toEqual([lessonA]);
+      expect(materials.rows.map((row) => row.id)).toEqual([materialA]);
     });
   });
 
@@ -645,6 +688,33 @@ describe('Row level security on tenant tables', () => {
         ),
       ).rejects.toThrow(/row-level security policy/i);
     });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "lessons"
+             ("id", "workspace_id", "class_id", "title", "lesson_date", "status",
+              "created_at", "updated_at")
+           VALUES ($1, $2, $3, 'Intruder', CURRENT_DATE, 'DRAFT', now(), now())`,
+          [randomUUID(), workspaceB, classB],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "lesson_materials"
+             ("id", "workspace_id", "lesson_id", "title", "kind", "url", "created_at", "updated_at")
+           VALUES ($1, $2, $3, 'Intruder', 'LINK', 'https://example.com', now(), now())`,
+          [randomUUID(), workspaceB, lessonB],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
   });
 
   it('cannot update or delete another tenant rows', async () => {
@@ -720,6 +790,18 @@ describe('Row level security on tenant tables', () => {
         [workspaceB],
       );
       const removePayments = await query(`DELETE FROM "payments" WHERE "id" = $1`, [paymentB]);
+      const updateLessons = await query(
+        `UPDATE "lessons" SET "title" = 'Intruder' WHERE "workspace_id" = $1`,
+        [workspaceB],
+      );
+      const removeLessons = await query(`DELETE FROM "lessons" WHERE "id" = $1`, [lessonB]);
+      const updateMaterials = await query(
+        `UPDATE "lesson_materials" SET "title" = 'Intruder' WHERE "workspace_id" = $1`,
+        [workspaceB],
+      );
+      const removeMaterials = await query(`DELETE FROM "lesson_materials" WHERE "id" = $1`, [
+        materialB,
+      ]);
 
       expect(update.rowCount).toBe(0);
       expect(remove.rowCount).toBe(0);
@@ -743,6 +825,10 @@ describe('Row level security on tenant tables', () => {
       expect(removeFees.rowCount).toBe(0);
       expect(updatePayments.rowCount).toBe(0);
       expect(removePayments.rowCount).toBe(0);
+      expect(updateLessons.rowCount).toBe(0);
+      expect(removeLessons.rowCount).toBe(0);
+      expect(updateMaterials.rowCount).toBe(0);
+      expect(removeMaterials.rowCount).toBe(0);
     });
   });
 
@@ -767,6 +853,8 @@ describe('Row level security on tenant tables', () => {
       const fees = await query('SELECT "id" FROM "student_fees"');
       const payments = await query('SELECT "id" FROM "payments"');
       const counters = await query('SELECT "workspace_id" FROM "workspace_counters"');
+      const lessons = await query('SELECT "id" FROM "lessons"');
+      const materials = await query('SELECT "id" FROM "lesson_materials"');
 
       expect(memberships.rowCount).toBe(3);
       expect(invitations.rowCount).toBe(2);
@@ -785,6 +873,8 @@ describe('Row level security on tenant tables', () => {
       expect(fees.rowCount).toBe(2);
       expect(payments.rowCount).toBe(2);
       expect(counters.rowCount).toBe(2);
+      expect(lessons.rowCount).toBe(2);
+      expect(materials.rowCount).toBe(2);
     });
   });
 

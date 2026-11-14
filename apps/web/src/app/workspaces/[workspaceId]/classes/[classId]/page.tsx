@@ -16,6 +16,7 @@ import { AssignTeacherForm } from '@/components/assign-teacher-form';
 import { AttendanceManager } from '@/components/attendance-manager';
 import { ClassActions } from '@/components/class-actions';
 import { ClassAttendanceSummary } from '@/components/class-attendance-summary';
+import { ClassLessons } from '@/components/class-lessons';
 import { ClassSubjectForm } from '@/components/class-subject-form';
 import { ClassScheduleManager } from '@/components/class-schedule-manager';
 import { ClassTeacherActions } from '@/components/class-teacher-actions';
@@ -44,6 +45,7 @@ import {
 } from '@/lib/classes';
 import { formatDate } from '@/lib/format-date';
 import type { ClassScheduleListResponse } from '@/lib/schedule';
+import { type LessonListResponse } from '@/lib/lessons';
 import { studentFullName } from '@/lib/student';
 import {
   subjectStatusClasses,
@@ -169,6 +171,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     teacherDirectoryResponse,
     classSubjectsResponse,
     subjectDirectoryResponse,
+    lessonsResponse,
     scheduleResponse,
     attendanceResponse,
     summaryResponse,
@@ -205,6 +208,13 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
           { headers, cache: 'no-store' },
         )
       : null,
+    fetch(
+      `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/lessons?pageSize=50`,
+      {
+        headers,
+        cache: 'no-store',
+      },
+    ),
     fetch(`${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/schedule`, {
       headers,
       cache: 'no-store',
@@ -231,6 +241,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     throw new Error('Unable to load the class subjects.');
   }
 
+  if (!lessonsResponse.ok) {
+    throw new Error('Unable to load the class lessons.');
+  }
+
   if (!scheduleResponse.ok) {
     throw new Error('Unable to load the class timetable.');
   }
@@ -254,6 +268,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
       ? ((await teacherDirectoryResponse.json()) as TeacherListResponse).items
       : [];
   const classSubjects = (await classSubjectsResponse.json()) as ClassSubjectListResponse;
+  const classLessons = (await lessonsResponse.json()) as LessonListResponse;
   const schedule = (await scheduleResponse.json()) as ClassScheduleListResponse;
   const initialAttendance = (await attendanceResponse.json()) as AttendanceRegisterResponse;
   const initialSummary = (await summaryResponse.json()) as ClassAttendanceSummaryResponse;
@@ -588,6 +603,22 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
             </p>
           )
         ) : null}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <ClassLessons
+          workspaceId={currentWorkspace.id}
+          classId={schoolClass.id}
+          canWrite={(canManage || isAssignedTeacher) && schoolClass.status === 'ACTIVE'}
+          readOnlyNote={
+            schoolClass.status !== 'ACTIVE'
+              ? 'This class is archived. New lessons cannot be added.'
+              : undefined
+          }
+          lessons={classLessons.items}
+          subjects={classSubjects.items}
+          defaultDate={today}
+        />
       </section>
 
       <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
