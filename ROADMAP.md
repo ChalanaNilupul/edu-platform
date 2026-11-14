@@ -111,7 +111,7 @@ The initial target market is Sri Lanka, with support planned for independent tui
 - [x] Create dedicated `/workspaces` page.
 - [x] Add workspace navigation to the sidebar.
 - [x] Restore active workspace selection after page refresh.
-- [ ] Complete manual browser verification (requires a running database).
+- [x] Complete manual browser verification (requires a running database).
 
 ## 2.5 Invitations and Membership Management
 
@@ -512,12 +512,26 @@ Verified: 320 unit tests, 144 mocked HTTP E2E tests, 110 real-database integrati
 
 # Phase 8 — Learning Management
 
-**Status: Not Started**
+**Status: In progress — batch 1 (lessons and learning materials) delivered**
 
-- [ ] Implement lesson management.
-- [ ] Implement learning materials.
-- [ ] Support PDF resources.
-- [ ] Support video resources.
+### Lessons and learning materials (November 14, 2026)
+
+Migration `20261114220000_add_lessons` adds `lessons` and `lesson_materials` with tenant RLS on both.
+
+- A lesson belongs to one class with a title, a calendar date (`lessonDate`, stored as a date), `DRAFT`/`PUBLISHED` status, an optional description and an optional subject that must be linked to that class. The creator membership is recorded and set to null if the membership is removed.
+- `GET/POST /workspaces/:workspaceId/classes/:classId/lessons` (paginated, newest lesson date first, `page`/`pageSize` up to 100) and `GET/PATCH/DELETE /workspaces/:workspaceId/lessons/:lessonId`. Updates only audit and write fields that actually changed, and deleting a lesson cascades its materials.
+- Materials are URL-referenced resources (`PDF`, `VIDEO` or `LINK`) with a title, an `http(s)` URL and an optional description: `POST /workspaces/:workspaceId/lessons/:lessonId/materials`, `PATCH/DELETE /workspaces/:workspaceId/materials/:materialId`. No file uploads — the repository has no storage infrastructure, so this batch is deliberate "option 1" scope.
+- Reads allow OWNER, manager roles and teachers. Writes allow managers plus the teachers actively assigned to that class (owner always); an unassigned teacher receives 403 "Only this class's teachers can manage lessons". Archived classes refuse new lessons.
+- Audit events: `LESSON_CREATED`, `LESSON_UPDATED` (changed field names only), `LESSON_DELETED`, `LESSON_MATERIAL_CREATED`, `LESSON_MATERIAL_UPDATED`, `LESSON_MATERIAL_DELETED`. No titles or URLs in metadata.
+- Web UI: a Lessons card on the class detail page (between Subjects and Weekly timetable) with a create form (title, date, subject from the class's active links, description) and a list showing date, subject, author, material count and status. A lesson detail page shows the materials manager (add/edit/remove) and Publish/Move to draft/Delete actions. Archived classes show a read-only note and no write controls.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration.
+
+Verified: 337 unit tests, 153 mocked HTTP E2E tests, 116 real-database integration tests (including RLS on `lessons` and `lesson_materials`), typecheck, lint, format, API build, `next build` and a browser walkthrough (create a lesson, open its detail page, add PDF and video materials, reject an invalid URL, publish and move to draft, edit and remove a material, delete a lesson, archive a class into read-only mode and reactivate it, and teacher access both without an assignment — 403 on create, read-only list — and with one — create allowed, write controls hidden).
+
+- [x] Implement lesson management.
+- [x] Implement learning materials.
+- [x] Support PDF resources.
+- [x] Support video resources.
 - [ ] Implement assignments.
 - [ ] Implement student submissions.
 - [ ] Implement teacher feedback.
