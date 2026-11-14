@@ -74,11 +74,19 @@ type DashboardUser = {
 type DashboardShellProps = {
   user: DashboardUser;
   activePage?:
-    'Dashboard' | 'Workspaces' | 'Students' | 'Teachers' | 'Classes' | 'Subjects' | 'Finance';
+    | 'Dashboard'
+    | 'Workspaces'
+    | 'Students'
+    | 'Teachers'
+    | 'Classes'
+    | 'Subjects'
+    | 'Attendance'
+    | 'Finance';
   studentsHref?: string;
   teachersHref?: string;
   classesHref?: string;
   subjectsHref?: string;
+  attendanceHref?: string;
   financeHref?: string;
   children?: ReactNode;
 };
@@ -90,6 +98,7 @@ export function DashboardShell({
   teachersHref,
   classesHref,
   subjectsHref,
+  attendanceHref,
   financeHref,
   children,
 }: DashboardShellProps) {
@@ -109,6 +118,12 @@ export function DashboardShell({
     subjectsHref ??
     (studentsHref?.endsWith('/students')
       ? `${studentsHref.slice(0, -'/students'.length)}/subjects`
+      : undefined);
+
+  const resolvedAttendanceHref =
+    attendanceHref ??
+    (studentsHref?.endsWith('/students')
+      ? `${studentsHref.slice(0, -'/students'.length)}/attendance`
       : undefined);
 
   const resolvedFinanceHref =
@@ -166,9 +181,11 @@ export function DashboardShell({
                       ? resolvedClassesHref
                       : item.label === 'Subjects'
                         ? resolvedSubjectsHref
-                        : item.label === 'Finance'
-                          ? resolvedFinanceHref
-                          : item.href;
+                        : item.label === 'Attendance'
+                          ? resolvedAttendanceHref
+                          : item.label === 'Finance'
+                            ? resolvedFinanceHref
+                            : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive

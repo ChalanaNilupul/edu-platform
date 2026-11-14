@@ -97,7 +97,7 @@ describe('AttendanceService', () => {
   const now = new Date('2026-11-13T09:00:00.000Z');
 
   const tx = {
-    class: { findFirst: vi.fn() },
+    class: { findFirst: vi.fn(), findMany: vi.fn() },
     classTeacher: { findFirst: vi.fn() },
     student: { findFirst: vi.fn() },
     enrollment: { findMany: vi.fn() },
@@ -110,6 +110,7 @@ describe('AttendanceService', () => {
     },
     attendanceRecord: {
       findMany: vi.fn(),
+      groupBy: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
     },
@@ -171,6 +172,9 @@ describe('AttendanceService', () => {
     );
 
     tx.attendanceSession.findMany.mockResolvedValue([]);
+
+    tx.class.findMany.mockResolvedValue([]);
+    tx.attendanceRecord.groupBy.mockResolvedValue([]);
 
     tx.enrollment.findMany.mockImplementation(
       async ({ where }: { where?: { studentId?: { in?: string[] } } }) => {
@@ -370,6 +374,141 @@ describe('AttendanceService', () => {
       await expect(
         service.getRegister(ACTOR_ID, WORKSPACE_ID, CLASS_ID, DATE),
       ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('getOverview', () => {
+    function classRow(
+      overrides: Partial<{ id: string; name: string; grade: string | null; enrolled: number }> = {},
+    ) {
+      return {
+        id: overrides.id ?? CLASS_ID,
+        name: overrides.name ?? 'Grade 6 Maths',
+        grade: overrides.grade ?? 'Grade 6',
+        _count: { enrollments: overrides.enrolled ?? 2 },
+      };
+    }
+
+    function sessionRow(overrides: Partial<StoredSession> = {}) {
+      return {
+        id: overrides.id ?? SESSION_ID,
+        classId: overrides.classId ?? CLASS_ID,
+        sessionDate: overrides.sessionDate ?? new Date('2026-11-13T00:00:00.000Z'),
+        createdAt: overrides.createdAt ?? now,
+        updatedAt: overrides.updatedAt ?? now,
+        recordedBy: recordedByFor(
+          overrides.recordedByMembershipId === undefined
+            ? ADMIN_MEMBERSHIP_ID
+            : overrides.recordedByMembershipId,
+        ),
+      };
+    }
+
+    it('lists active classes with no register as missing', async () => {
+      tx.class.findMany.mockResolvedValue([classRow()]);
+
+      const overview = await service.getOverview(ACTOR_ID, WORKSPACE_ID, DATE);
+
+      expect(overview).toEqual({
+        date: DATE,
+        totals: { classes: 1, saved: 0, missing: 1 },
+        classes: [
+          {
+            classId: CLASS_ID,
+            name: 'Grade 6 Maths',
+            grade: 'Grade 6',
+            enrolledCount: 2,
+            session: null,
+            counts: null,
+          },
+        ],
+      });
+      expect(tx.class.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { workspaceId: WORKSPACE_ID, status: ClassStatus.ACTIVE },
+          orderBy: [{ name: 'asc' }],
+        }),
+      );
+      expect(tx.attendanceRecord.groupBy).not.toHaveBeenCalled();
+    });
+
+    it('reports saved registers with counts and totals', async () => {
+      tx.class.findMany.mockResolvedValue([
+        classRow({ id: CLASS_ID, enrolled: 3 }),
+        classRow({ id: 'class-empty', name: 'Grade 7 Science', enrolled: 1 }),
+      ]);
+      tx.attendanceSession.findMany.mockResolvedValue([sessionRow()]);
+      tx.attendanceRecord.groupBy.mockResolvedValue([
+        { sessionId: SESSION_ID, status: AttendanceStatus.PRESENT, _count: { _all: 1 } },
+        { sessionId: SESSION_ID, status: AttendanceStatus.EXCUSED, _count: { _all: 1 } },
+      ]);
+
+      const overview = await service.getOverview(ACTOR_ID, WORKSPACE_ID, DATE);
+
+      expect(overview.totals).toEqual({ classes: 2, saved: 1, missing: 1 });
+      expect(overview.classes[0]).toMatchObject({
+        classId: CLASS_ID,
+        session: {
+          id: SESSION_ID,
+          recordedBy: { membershipId: ADMIN_MEMBERSHIP_ID, name: 'Sarath Admin' },
+        },
+        counts: { present: 1, absent: 0, late: 0, excused: 1, unmarked: 1 },
+      });
+      expect(overview.classes[1]).toMatchObject({ classId: 'class-empty', session: null });
+      expect(tx.attendanceSession.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            workspaceId: WORKSPACE_ID,
+            classId: { in: [CLASS_ID, 'class-empty'] },
+            sessionDate: expect.any(Date),
+          },
+        }),
+      );
+    });
+
+    it('clamps unmarked to zero when saved records outnumber current enrollments', async () => {
+      tx.class.findMany.mockResolvedValue([classRow({ enrolled: 1 })]);
+      tx.attendanceSession.findMany.mockResolvedValue([sessionRow()]);
+      tx.attendanceRecord.groupBy.mockResolvedValue([
+        { sessionId: SESSION_ID, status: AttendanceStatus.PRESENT, _count: { _all: 2 } },
+        { sessionId: SESSION_ID, status: AttendanceStatus.ABSENT, _count: { _all: 1 } },
+      ]);
+
+      const overview = await service.getOverview(ACTOR_ID, WORKSPACE_ID, DATE);
+
+      expect(overview.classes[0]?.counts).toEqual({
+        present: 2,
+        absent: 1,
+        late: 0,
+        excused: 0,
+        unmarked: 0,
+      });
+    });
+
+    it('returns an empty list when the workspace has no active classes', async () => {
+      const overview = await service.getOverview(ACTOR_ID, WORKSPACE_ID, DATE);
+
+      expect(overview).toEqual({
+        date: DATE,
+        totals: { classes: 0, saved: 0, missing: 0 },
+        classes: [],
+      });
+      expect(tx.attendanceSession.findMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects an invalid date before touching the tenant', async () => {
+      await expect(
+        service.getOverview(ACTOR_ID, WORKSPACE_ID, '2026-11-31'),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(tenantMock.runAsTenant).not.toHaveBeenCalled();
+    });
+
+    it('propagates the role check from the access service', async () => {
+      workspaceAccessMock.requireRoles.mockRejectedValueOnce(new ForbiddenException());
+
+      await expect(service.getOverview(ACTOR_ID, WORKSPACE_ID, DATE)).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
     });
   });
 

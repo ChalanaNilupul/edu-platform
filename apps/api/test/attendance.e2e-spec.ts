@@ -46,6 +46,21 @@ const STUDENT_SUMMARY = {
   classes: [],
 };
 
+const OVERVIEW = {
+  date: '2026-11-13',
+  totals: { classes: 1, saved: 0, missing: 1 },
+  classes: [
+    {
+      classId: CLASS_ID,
+      name: 'Grade 6 Maths',
+      grade: 'Grade 6',
+      enrolledCount: 2,
+      session: null,
+      counts: null,
+    },
+  ],
+};
+
 describe('Attendance API (e2e)', () => {
   let app: INestApplication;
 
@@ -76,6 +91,7 @@ describe('Attendance API (e2e)', () => {
     saveRegister: vi.fn(),
     getClassSummary: vi.fn(),
     getStudentSummary: vi.fn(),
+    getOverview: vi.fn(),
   };
 
   const workspaceAccessService = {
@@ -96,6 +112,7 @@ describe('Attendance API (e2e)', () => {
     attendanceService.saveRegister.mockResolvedValue(REGISTER);
     attendanceService.getClassSummary.mockResolvedValue(CLASS_SUMMARY);
     attendanceService.getStudentSummary.mockResolvedValue(STUDENT_SUMMARY);
+    attendanceService.getOverview.mockResolvedValue(OVERVIEW);
   });
 
   beforeAll(async () => {
@@ -267,6 +284,66 @@ describe('Attendance API (e2e)', () => {
     expect(write.status).toBe(403);
     expect(attendanceService.getRegister).not.toHaveBeenCalled();
     expect(attendanceService.saveRegister).not.toHaveBeenCalled();
+  });
+
+  describe('overview', () => {
+    const overviewPath = `/api/v1/workspaces/${WORKSPACE_ID}/attendance/overview`;
+
+    it('rejects unauthenticated requests', async () => {
+      const response = await agent().get(`${overviewPath}?date=2026-11-13`);
+
+      expect(response.status).toBe(401);
+    });
+
+    it('returns the day overview for a date', async () => {
+      const response = await agent()
+        .get(`${overviewPath}?date=2026-11-13`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(response.status).toBe(200);
+      expect(response.body).toEqual(OVERVIEW);
+      expect(attendanceService.getOverview).toHaveBeenCalledWith(
+        user.id,
+        WORKSPACE_ID,
+        '2026-11-13',
+      );
+    });
+
+    it('rejects a missing or malformed date', async () => {
+      for (const query of ['', '?date=2026-02-31', '?date=13-11-2026', '?date=2026-11-13&x=1']) {
+        const response = await agent()
+          .get(`${overviewPath}${query}`)
+          .set('Cookie', 'edu_session=valid-session');
+
+        expect(response.status).toBe(400);
+      }
+
+      expect(attendanceService.getOverview).not.toHaveBeenCalled();
+    });
+
+    it('lets teachers read the overview and blocks students', async () => {
+      workspaceAccessService.getActiveMembership.mockResolvedValue({
+        ...membership,
+        role: WorkspaceRole.TEACHER,
+      });
+
+      const teacherRead = await agent()
+        .get(`${overviewPath}?date=2026-11-13`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(teacherRead.status).toBe(200);
+
+      workspaceAccessService.getActiveMembership.mockResolvedValue({
+        ...membership,
+        role: WorkspaceRole.STUDENT,
+      });
+
+      const studentRead = await agent()
+        .get(`${overviewPath}?date=2026-11-13`)
+        .set('Cookie', 'edu_session=valid-session');
+
+      expect(studentRead.status).toBe(403);
+    });
   });
 
   describe('summaries', () => {

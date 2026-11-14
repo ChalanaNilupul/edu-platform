@@ -28,6 +28,17 @@ export class AttendanceController {
   constructor(@Inject(AttendanceService) private readonly attendanceService: AttendanceService) {}
 
   @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)
+  @Get('attendance/overview')
+  getOverview(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Query(new ValidationPipe({ expectedType: GetAttendanceQueryDto, transform: true }))
+    query: GetAttendanceQueryDto,
+  ) {
+    return this.attendanceService.getOverview(user.id, workspaceId, query.date);
+  }
+
+  @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)
   @Get('classes/:classId/attendance')
   getRegister(
     @CurrentUser() user: AuthenticatedUser,

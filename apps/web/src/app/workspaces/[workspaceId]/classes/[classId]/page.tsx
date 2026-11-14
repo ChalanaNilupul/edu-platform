@@ -24,6 +24,7 @@ import { EnrollStudentForm } from '@/components/enroll-student-form';
 import { EnrollmentActions } from '@/components/enrollment-actions';
 import { WorkspaceAccessNotice } from '@/components/workspace-access-notice';
 import {
+  isCalendarDate,
   lastNDays,
   todayInColombo,
   type AttendanceRegisterResponse,
@@ -145,8 +146,11 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
   const rawPage = typeof queryParams.page === 'string' ? Number(queryParams.page) : 1;
   const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
   const canManage = canManageClasses(currentWorkspace.role);
-  const attendanceDate = todayInColombo();
-  const summaryRange = lastNDays(attendanceDate, 30);
+  const today = todayInColombo();
+  const requestedDate = typeof queryParams.date === 'string' ? queryParams.date.trim() : '';
+  const attendanceDate =
+    isCalendarDate(requestedDate) && requestedDate <= today ? requestedDate : today;
+  const summaryRange = lastNDays(today, 30);
 
   const rosterParams = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
 
@@ -615,7 +619,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
         </div>
       </section>
 
-      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <section
+        id="attendance"
+        className="mb-6 scroll-mt-24 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
+      >
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-lg font-bold text-slate-900">Attendance</h2>

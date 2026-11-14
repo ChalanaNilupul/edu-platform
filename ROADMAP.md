@@ -417,7 +417,7 @@ Verified: 260 unit tests, 110 mocked HTTP E2E tests, 88 real-database integratio
 
 # Phase 6 — Attendance Management
 
-**Status: In progress — batch 1 (daily register API and class-page UI) and batch 2 (class and student summaries) delivered**
+**Status: In progress — batch 1 (daily register API and class-page UI), batch 2 (class and student summaries) and the cross-class attendance hub delivered**
 
 ### Daily register notes (November 14, 2026)
 
@@ -448,6 +448,16 @@ The range is inclusive `from`/`to`, must be real `YYYY-MM-DD` calendar days, mus
 Web UI: an Attendance summary card on the class detail page (totals, class rate, per-student table with a "Left class" marker for leavers) and on the student detail page (totals, attendance rate, per-class table). Both use the shared range picker and refetch client-side without reloading the page.
 
 Verified: 284 unit tests, 125 mocked HTTP E2E tests, 99 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough (three saved registers across two students, class summary totals and rates, a 7-day preset, a narrow custom range and the student summary across the same class).
+
+### Attendance hub notes (November 14, 2026)
+
+The Attendance tab is now a live landing page instead of a disabled menu item; the register itself stays on the class page.
+
+- `GET /workspaces/:workspaceId/attendance/overview?date=YYYY-MM-DD` (OWNER/ADMIN/BRANCH_MANAGER/TEACHER) lists every active class with its active-enrollment count, the saved session's author and last-saved time, and present/absent/late/excused/unmarked counts for that day. Classes without a register return `session: null` and `counts: null`; archived classes are excluded. No new tables or migration.
+- Three bounded queries (active classes, sessions for the date, a `groupBy` of record counts). `unmarked` is clamped at zero because a saved register keeps records for students who have since left the class.
+- Web: `apps/web/src/app/workspaces/[workspaceId]/attendance/page.tsx` shows the totals (active classes, saved, not started), a date picker capped at today, a per-class table and an "Open register" / "Mark register" link that deep-links to `…/classes/:classId?date=…#attendance`. An invalid or future `date` falls back to today. The class page now honours `?date=` for the attendance card and exposes the `#attendance` anchor; the sidebar Attendance entry points at the hub.
+
+Verified: 313 unit tests, 142 mocked HTTP E2E tests, 108 real-database integration tests, typecheck, lint, format, API build, `next build` and a browser walkthrough (a hub with one unsaved and one saved class, the saved-by line and mark counts, date switching, the deep link into that day's register and the fallback for invalid and future dates).
 
 - [x] Implement daily attendance.
 - [x] Implement manual attendance recording.

@@ -125,6 +125,25 @@ export type StudentAttendanceSummaryView = SummaryTotals & {
   classes: StudentAttendanceSummaryRow[];
 };
 
+export type AttendanceOverviewRow = {
+  classId: string;
+  name: string;
+  grade: string | null;
+  enrolledCount: number;
+  session: {
+    id: string;
+    recordedBy: { membershipId: string; name: string } | null;
+    updatedAt: Date;
+  } | null;
+  counts: AttendanceCounts | null;
+};
+
+export type AttendanceOverviewView = {
+  date: string;
+  totals: { classes: number; saved: number; missing: number };
+  classes: AttendanceOverviewRow[];
+};
+
 function formatDate(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
@@ -292,6 +311,112 @@ export class AttendanceService {
       await this.requireClass(tx, workspaceId, classId);
 
       return this.readRegister(tx, workspaceId, classId, sessionDate);
+    });
+  }
+
+  async getOverview(actorId: string, workspaceId: string, date: string) {
+    const sessionDate = parseRegisterDate(date);
+
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+      await this.workspaceAccess.requireRoles(actorId, workspaceId, READ_ROLES, tx);
+
+      const classes = await tx.class.findMany({
+        where: { workspaceId, status: ClassStatus.ACTIVE },
+        select: {
+          id: true,
+          name: true,
+          grade: true,
+          _count: {
+            select: { enrollments: { where: { status: EnrollmentStatus.ACTIVE } } },
+          },
+        },
+        orderBy: [{ name: 'asc' }],
+      });
+
+      const classIds = classes.map((row) => row.id);
+      const sessions =
+        classIds.length === 0
+          ? []
+          : await tx.attendanceSession.findMany({
+              where: { workspaceId, classId: { in: classIds }, sessionDate },
+              select: sessionSelect,
+            });
+
+      const sessionIds = sessions.map((session) => session.id);
+      const groups =
+        sessionIds.length === 0
+          ? []
+          : await tx.attendanceRecord.groupBy({
+              by: ['sessionId', 'status'],
+              where: { workspaceId, sessionId: { in: sessionIds } },
+              _count: { _all: true },
+            });
+
+      const sessionByClass = new Map(sessions.map((session) => [session.classId, session]));
+      const countsBySession = new Map<string, AttendanceCounts>();
+
+      for (const group of groups) {
+        const counts = countsBySession.get(group.sessionId) ?? {
+          present: 0,
+          absent: 0,
+          late: 0,
+          excused: 0,
+          unmarked: 0,
+        };
+
+        switch (group.status) {
+          case AttendanceStatus.PRESENT:
+            counts.present += group._count._all;
+            break;
+          case AttendanceStatus.ABSENT:
+            counts.absent += group._count._all;
+            break;
+          case AttendanceStatus.LATE:
+            counts.late += group._count._all;
+            break;
+          default:
+            counts.excused += group._count._all;
+        }
+
+        countsBySession.set(group.sessionId, counts);
+      }
+
+      const rows: AttendanceOverviewRow[] = classes.map((row) => {
+        const session = sessionByClass.get(row.id);
+        const counted = session ? countsBySession.get(session.id) : undefined;
+        const marked = counted
+          ? counted.present + counted.absent + counted.late + counted.excused
+          : 0;
+
+        return {
+          classId: row.id,
+          name: row.name,
+          grade: row.grade,
+          enrolledCount: row._count.enrollments,
+          session: session
+            ? {
+                id: session.id,
+                recordedBy: toSessionView(session).recordedBy,
+                updatedAt: session.updatedAt,
+              }
+            : null,
+          // Saved registers keep records for students who have since left the
+          // class, so the unmarked count never goes below zero.
+          counts: counted
+            ? { ...counted, unmarked: Math.max(0, row._count.enrollments - marked) }
+            : null,
+        };
+      });
+
+      return {
+        date: formatDate(sessionDate),
+        totals: {
+          classes: rows.length,
+          saved: rows.filter((row) => row.session !== null).length,
+          missing: rows.filter((row) => row.session === null).length,
+        },
+        classes: rows,
+      } satisfies AttendanceOverviewView;
     });
   }
 
