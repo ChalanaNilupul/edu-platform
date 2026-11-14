@@ -4,6 +4,7 @@ import {
   Activity,
   BarChart3,
   Bell,
+  BookMarked,
   BookOpen,
   Building2,
   CalendarDays,
@@ -24,6 +25,7 @@ const navigation = [
   { label: 'Students', icon: Users },
   { label: 'Teachers', icon: GraduationCap },
   { label: 'Classes', icon: BookOpen },
+  { label: 'Subjects', icon: BookMarked },
   { label: 'Attendance', icon: ClipboardCheck },
   { label: 'Finance', icon: Wallet },
   { label: 'Learning', icon: Library },
@@ -71,10 +73,11 @@ type DashboardUser = {
 
 type DashboardShellProps = {
   user: DashboardUser;
-  activePage?: 'Dashboard' | 'Workspaces' | 'Students' | 'Teachers' | 'Classes';
+  activePage?: 'Dashboard' | 'Workspaces' | 'Students' | 'Teachers' | 'Classes' | 'Subjects';
   studentsHref?: string;
   teachersHref?: string;
   classesHref?: string;
+  subjectsHref?: string;
   children?: ReactNode;
 };
 
@@ -84,6 +87,7 @@ export function DashboardShell({
   studentsHref,
   teachersHref,
   classesHref,
+  subjectsHref,
   children,
 }: DashboardShellProps) {
   const resolvedTeachersHref =
@@ -96,6 +100,12 @@ export function DashboardShell({
     classesHref ??
     (studentsHref?.endsWith('/students')
       ? `${studentsHref.slice(0, -'/students'.length)}/classes`
+      : undefined);
+
+  const resolvedSubjectsHref =
+    subjectsHref ??
+    (studentsHref?.endsWith('/students')
+      ? `${studentsHref.slice(0, -'/students'.length)}/subjects`
       : undefined);
 
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -145,7 +155,9 @@ export function DashboardShell({
                     ? resolvedTeachersHref
                     : item.label === 'Classes'
                       ? resolvedClassesHref
-                      : item.href;
+                      : item.label === 'Subjects'
+                        ? resolvedSubjectsHref
+                        : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive

@@ -3,6 +3,7 @@ export const instant = false;
 import Link from 'next/link';
 import {
   ArrowLeft,
+  BookMarked,
   ChevronLeft,
   ChevronRight,
   GraduationCap,
@@ -13,6 +14,7 @@ import {
 
 import { AssignTeacherForm } from '@/components/assign-teacher-form';
 import { ClassActions } from '@/components/class-actions';
+import { ClassSubjectForm } from '@/components/class-subject-form';
 import { ClassTeacherActions } from '@/components/class-teacher-actions';
 import { DashboardShell } from '@/components/dashboard-shell';
 import { EnrollStudentForm } from '@/components/enroll-student-form';
@@ -32,6 +34,13 @@ import {
 } from '@/lib/classes';
 import { formatDate } from '@/lib/format-date';
 import { studentFullName } from '@/lib/student';
+import {
+  subjectStatusClasses,
+  subjectStatusLabels,
+  type ClassSubjectListResponse,
+  type SubjectListResponse,
+  type SubjectRecord,
+} from '@/lib/subjects';
 import { roleLabels, teacherName, type TeacherListResponse } from '@/lib/teachers';
 import { canManageClasses, canViewClasses, getWorkspaceSession } from '@/lib/workspace-session';
 
@@ -137,31 +146,47 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     rosterParams.set('status', status);
   }
 
-  const [rosterResponse, activeResponse, teachersResponse, teacherDirectoryResponse] =
-    await Promise.all([
-      fetch(
-        `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
-        { headers, cache: 'no-store' },
-      ),
-      canManage && schoolClass.status === 'ACTIVE'
-        ? fetch(
-            `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?status=ACTIVE&pageSize=${LOOKUP_PAGE_SIZE}`,
-            { headers, cache: 'no-store' },
-          )
-        : null,
-      fetch(
-        `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/teachers${
-          canManage ? '?includeEnded=true' : ''
-        }`,
-        { headers, cache: 'no-store' },
-      ),
-      canManage && schoolClass.status === 'ACTIVE'
-        ? fetch(
-            `${apiUrl}/workspaces/${currentWorkspace.id}/teachers?pageSize=${LOOKUP_PAGE_SIZE}`,
-            { headers, cache: 'no-store' },
-          )
-        : null,
-    ]);
+  const [
+    rosterResponse,
+    activeResponse,
+    teachersResponse,
+    teacherDirectoryResponse,
+    classSubjectsResponse,
+    subjectDirectoryResponse,
+  ] = await Promise.all([
+    fetch(
+      `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
+      { headers, cache: 'no-store' },
+    ),
+    canManage && schoolClass.status === 'ACTIVE'
+      ? fetch(
+          `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?status=ACTIVE&pageSize=${LOOKUP_PAGE_SIZE}`,
+          { headers, cache: 'no-store' },
+        )
+      : null,
+    fetch(
+      `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/teachers${
+        canManage ? '?includeEnded=true' : ''
+      }`,
+      { headers, cache: 'no-store' },
+    ),
+    canManage && schoolClass.status === 'ACTIVE'
+      ? fetch(`${apiUrl}/workspaces/${currentWorkspace.id}/teachers?pageSize=${LOOKUP_PAGE_SIZE}`, {
+          headers,
+          cache: 'no-store',
+        })
+      : null,
+    fetch(`${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/subjects`, {
+      headers,
+      cache: 'no-store',
+    }),
+    canManage && schoolClass.status === 'ACTIVE'
+      ? fetch(
+          `${apiUrl}/workspaces/${currentWorkspace.id}/subjects?status=ACTIVE&pageSize=${LOOKUP_PAGE_SIZE}`,
+          { headers, cache: 'no-store' },
+        )
+      : null,
+  ]);
 
   if (!rosterResponse.ok) {
     throw new Error('Unable to load the class roster.');
@@ -169,6 +194,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
 
   if (!teachersResponse.ok) {
     throw new Error('Unable to load the class teachers.');
+  }
+
+  if (!classSubjectsResponse.ok) {
+    throw new Error('Unable to load the class subjects.');
   }
 
   const roster = (await rosterResponse.json()) as EnrollmentListResponse;
@@ -181,6 +210,21 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     teacherDirectoryResponse && teacherDirectoryResponse.ok
       ? ((await teacherDirectoryResponse.json()) as TeacherListResponse).items
       : [];
+  const classSubjects = (await classSubjectsResponse.json()) as ClassSubjectListResponse;
+  const subjectCatalogue =
+    subjectDirectoryResponse && subjectDirectoryResponse.ok
+      ? ((await subjectDirectoryResponse.json()) as SubjectListResponse).items
+      : [];
+
+  const subjectPicker: SubjectRecord[] = [...subjectCatalogue];
+
+  for (const subject of classSubjects.items) {
+    if (!subjectPicker.some((row) => row.id === subject.id)) {
+      subjectPicker.push(subject);
+    }
+  }
+
+  subjectPicker.sort((left, right) => left.name.localeCompare(right.name));
 
   function rosterHref(targetPage: number) {
     const next = new URLSearchParams();
@@ -423,6 +467,69 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
               ))}
             </ul>
           </details>
+        ) : null}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Subjects</h2>
+            <p className="mt-1 text-sm text-slate-500">Subjects this class covers.</p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            {classSubjects.items.length} linked
+          </span>
+        </div>
+
+        {classSubjects.items.length === 0 ? (
+          <div className="mt-4 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+            <BookMarked size={28} className="text-slate-400" />
+            <p className="mt-2 text-sm font-medium text-slate-700">No subjects linked yet</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {canManage
+                ? 'Link the subjects this class covers.'
+                : 'A manager has not linked any subjects to this class yet.'}
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {classSubjects.items.map((subject) => (
+              <li
+                key={subject.id}
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-sm"
+              >
+                <span className="font-medium text-slate-800">{subject.name}</span>
+                {subject.code ? (
+                  <span className="text-xs font-semibold text-slate-500">{subject.code}</span>
+                ) : null}
+                <span
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${subjectStatusClasses[subject.status]}`}
+                >
+                  {subjectStatusLabels[subject.status]}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {canManage ? (
+          schoolClass.status === 'ACTIVE' ? (
+            <div className="mt-6 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-900">Link subjects</h3>
+              <div className="mt-3">
+                <ClassSubjectForm
+                  workspaceId={currentWorkspace.id}
+                  classId={schoolClass.id}
+                  subjects={subjectPicker}
+                  selectedSubjectIds={classSubjects.items.map((row) => row.id)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">
+              This class is archived. Reactivate it to change its subjects.
+            </p>
+          )
         ) : null}
       </section>
 

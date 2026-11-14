@@ -375,10 +375,24 @@ Verified: 212 unit tests, 90 mocked HTTP E2E tests, 70 real-database integration
 
 # Phase 5 — Classes and Batches
 
-**Status: Partially started — class records, capacity and student enrollment were delivered with Phase 3 batch 4**
+**Status: In progress — class records, capacity and enrollment were delivered with Phase 3 batch 4, and batch 1 (subject catalogue and class links) is delivered**
+
+### Subject catalogue notes (November 14, 2026)
+
+Subjects are a workspace-level catalogue; classes link to subjects rather than owning them, so renaming or archiving a subject never duplicates data across classes.
+
+- `subjects` table (migration `20261114154500_add_subjects`) with `name`, optional `code`, optional `description` and `status` (`ACTIVE`/`ARCHIVED`). `(workspace_id, name)` is unique and `(workspace_id, code)` is unique when a code is present (Postgres treats NULL codes as distinct).
+- `class_subjects` join table (`class_id`, `subject_id`, unique pair) with cascade foreign keys and tenant RLS on both tables, matching the other workspace tables.
+- REST routes under `/workspaces/:workspaceId`: `GET`/`POST /subjects`, `GET`/`PATCH`/`DELETE /subjects/:subjectId`, plus `GET` and `PUT /classes/:classId/subjects`. Reads allow OWNER/ADMIN/BRANCH_MANAGER/TEACHER; writes are manager-only (OWNER/ADMIN/BRANCH_MANAGER).
+- Codes are trimmed and stored in upper case. Duplicate names or codes return 409. Deleting a subject that is linked to a class returns 409 with an archive hint; archiving keeps existing class links but hides the subject from pickers, and archived classes cannot change their subject list.
+- Audit events `SUBJECT_CREATED`, `SUBJECT_UPDATED`, `SUBJECT_ARCHIVED`, `SUBJECT_DELETED` and `CLASS_SUBJECTS_CHANGED` store ids, field names and added/removed subject ids only — no free text.
+- Web UI: `/workspaces/[workspaceId]/subjects` directory (search, status filter, pagination, class counts), create/edit pages, a Subjects sidebar entry, and a Subjects card on the class detail page with a multi-select picker for managers.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh role grants.
+
+Verified: 237 unit tests, 100 mocked HTTP E2E tests, 80 real-database integration tests (including RLS on `subjects` and `class_subjects`), typecheck, lint, format, API build, `next build` and a browser walkthrough of subject creation (trim/uppercase), search, archiving, class linking, count updates and the read-only teacher view.
 
 - [ ] Implement class and batch creation.
-- [ ] Implement subject management.
+- [x] Implement subject management.
 - [x] Assign teachers to classes.
 - [x] Enroll students into classes.
 - [x] Implement class capacity.

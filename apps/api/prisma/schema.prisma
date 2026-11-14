@@ -64,6 +64,11 @@ enum EnrollmentStatus {
   WITHDRAWN
 }
 
+enum SubjectStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -97,6 +102,11 @@ enum AuditEventType {
   CLASS_TEACHER_ASSIGNED
   CLASS_TEACHER_PRIMARY_CHANGED
   CLASS_TEACHER_REMOVED
+  SUBJECT_CREATED
+  SUBJECT_UPDATED
+  SUBJECT_ARCHIVED
+  SUBJECT_DELETED
+  CLASS_SUBJECTS_CHANGED
 }
 
 model User {
@@ -135,6 +145,8 @@ model Workspace {
   enrollments      Enrollment[]
   teacherProfiles  TeacherProfile[]
   classTeachers    ClassTeacher[]
+  subjects         Subject[]
+  classSubjects    ClassSubject[]
   activeSessions   Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -226,9 +238,10 @@ model Class {
   createdAt   DateTime    @default(now()) @map("created_at")
   updatedAt   DateTime    @updatedAt @map("updated_at")
 
-  workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   enrollments Enrollment[]
   teachers    ClassTeacher[]
+  subjects    ClassSubject[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -278,6 +291,44 @@ model ClassTeacher {
   @@index([workspaceId, classId])
   @@index([workspaceId, membershipId])
   @@map("class_teachers")
+}
+
+/// Workspace-level catalogue entry; archived subjects stay linked to their
+/// classes for history but drop out of pickers.
+model Subject {
+  id          String        @id @default(uuid())
+  workspaceId String        @map("workspace_id")
+  name        String
+  code        String?
+  description String?
+  status      SubjectStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  classLinks ClassSubject[]
+
+  @@unique([workspaceId, name])
+  @@unique([workspaceId, code])
+  @@index([workspaceId, status])
+  @@map("subjects")
+}
+
+/// One row per subject a class covers; a class can carry several subjects.
+model ClassSubject {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  classId     String   @map("class_id")
+  subjectId   String   @map("subject_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  class     Class     @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject   Subject   @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([classId, subjectId])
+  @@index([workspaceId, subjectId])
+  @@map("class_subjects")
 }
 
 model Membership {

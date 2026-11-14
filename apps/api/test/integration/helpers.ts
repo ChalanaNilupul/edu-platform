@@ -58,7 +58,7 @@ export async function createTestContext(): Promise<TestContext> {
 
 export async function truncateAll(prisma: PrismaService) {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "audit_events", "class_teachers", "teacher_profiles", "enrollments", "classes", "student_guardians", "guardians", "students", "sessions", ' +
+    'TRUNCATE TABLE "audit_events", "class_subjects", "subjects", "class_teachers", "teacher_profiles", "enrollments", "classes", "student_guardians", "guardians", "students", "sessions", ' +
       '"workspace_invitations", "memberships", "email_verification_tokens", "password_reset_tokens", ' +
       '"workspaces", "users", "database_health" RESTART IDENTITY CASCADE',
   );
@@ -74,6 +74,10 @@ export function post(client: ReturnType<typeof createAgent>, path: string) {
 
 export function patch(client: ReturnType<typeof createAgent>, path: string) {
   return client.patch(`/api/v1${path}`).set('Origin', WEB_ORIGIN);
+}
+
+export function put(client: ReturnType<typeof createAgent>, path: string) {
+  return client.put(`/api/v1${path}`).set('Origin', WEB_ORIGIN);
 }
 
 export function del(client: ReturnType<typeof createAgent>, path: string) {
