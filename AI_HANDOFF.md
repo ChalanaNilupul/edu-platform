@@ -68,7 +68,7 @@ Current development branch:
 
 Current development phase:
 
-**Phase 8 — Learning Management (batch 1: lessons and materials delivered, uncommitted)**
+**Phase 8 — Learning Management (batch 1: lessons and materials delivered and pushed)**
 
 Do not assume that Phase 2 or Phase 3 has been merged into `main`.
 
@@ -1095,9 +1095,9 @@ Follow this order:
 1. ~~Finish manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset.~~ Done November 14, 2026 — all four flows passed and the walkthrough data was deleted.
 2. ~~Verify rate limiting and Origin checking at runtime.~~ Done November 13, 2026 — see §11.
 3. ~~Decide whether to extend email-verification enforcement beyond invitation acceptance.~~ Done November 13, 2026 — enforced for workspace creation and invitations; login and workspace switching stay open.
-4. Phase 4 batch 1 and batch 2 are delivered and pushed; Phase 5 batches 1–2, Phase 6 batch 1 and Phase 7 batch 1 are pushed. The attendance hub (`1f820cb`) and Phase 7 batch 2 (receipts and the monthly finance report, both verified) were pushed in `9660e1f`. Phase 8 batch 1 (lessons and materials) is implemented, verified and still uncommitted on `feat/phase-8-learning`. Next: commit and push Phase 8 batch 1 once approved, then pick between Phase 8 batch 2 (assignments/submissions) and the remaining polish below.
+4. Phase 4 batch 1 and batch 2 are delivered and pushed; Phase 5 batches 1–2, Phase 6 batch 1 and Phase 7 batch 1 are pushed. The attendance hub (`1f820cb`) and Phase 7 batch 2 (receipts and the monthly finance report, both verified) were pushed in `9660e1f`. Phase 8 batch 1 (lessons and materials) was pushed in `232e83b` (code) and `220f794` (docs) on `feat/phase-8-learning`. Next: pick between Phase 8 batch 2 (assignments/submissions) and the remaining polish below, and run `pnpm --filter @edu-platform/api db:sync` on any clone that has not applied `20261114220000_add_lessons` yet.
 
-The Phase 2 runtime security checks, the M1 scope decision, Phase 4 batches 1–2 and the deferred browser confirmations are closed. Phase 5 batches 1–2, Phase 6 batch 1, Phase 7 batch 1, the attendance hub and Phase 7 batch 2 are pushed; Phase 8 batch 1 is awaiting commit. Remaining polish: the deferred guardian reuse work, Phase 4 batch 3 weekly availability, attendance reports and file-upload materials.
+The Phase 2 runtime security checks, the M1 scope decision, Phase 4 batches 1–2 and the deferred browser confirmations are closed. Phase 5 batches 1–2, Phase 6 batch 1, Phase 7 batch 1, the attendance hub, Phase 7 batch 2 and Phase 8 batch 1 are pushed. Remaining polish: the deferred guardian reuse work, Phase 4 batch 3 weekly availability, attendance reports and file-upload materials.
 
 # 17. Development Rules for AI Assistance
 
