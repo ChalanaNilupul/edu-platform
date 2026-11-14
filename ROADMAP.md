@@ -4,7 +4,7 @@ Last updated: November 14, 2026
 
 ## Project Status
 
-**Current Phase: Phase 6 — Attendance Management (batches 1–2 delivered)**
+**Current Phase: Phase 7 — Finance and Fee Management (batch 1 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -459,15 +459,31 @@ Verified: 284 unit tests, 125 mocked HTTP E2E tests, 99 real-database integratio
 
 # Phase 7 — Finance and Fee Management
 
-**Status: Not Started**
+**Status: In progress — batch 1 (fee plans, student fee records, monthly generation, payments) delivered**
 
-- [ ] Implement fee structures.
-- [ ] Implement student fee records.
-- [ ] Implement monthly fee management.
-- [ ] Implement cash payment recording.
-- [ ] Implement bank payment recording.
-- [ ] Implement payment history.
-- [ ] Implement outstanding balance calculations.
+### Fee plans and student fee notes (November 14, 2026)
+
+Finance is manager-only: every route requires OWNER/ADMIN/BRANCH_MANAGER. Amounts are `Decimal(12,2)` in the workspace currency and are serialized as fixed two-decimal strings.
+
+- `fee_plans`, `student_fees` and `payments` tables (migration `20261114200000_add_finance`) with tenant RLS on all three. `student_fees` caches `paid_amount` and `status` next to the billed `amount`, and both fee and payment rows record the membership id that created them (`SET NULL` on deletion).
+- Fee plans are monthly by default (due day 1–28) and can target one class or every active class. A plan is archived with a status change rather than deleted, so existing fee records keep their link.
+- `POST /finance/plans/:planId/generate` creates one record per actively enrolled student for a month, skipping duplicates via the `(student_id, fee_plan_id, period_month)` unique key, and reports created/skipped counts. Archived plans, archived classes and non-monthly plans are refused.
+- Manual fee records (`POST /finance/fees`) cover one-off charges that do not belong to a plan. A `PATCH` can edit the description, amount, due date and note, or void the record; voided records keep their history and refuse payments.
+- Payments (`POST /finance/fees/:feeId/payments`) support `CASH` and `BANK` with a paid date, optional reference and note. The fee's paid amount, balance and derived `UNPAID/PARTIAL/PAID` status update in the same transaction. Deleting a payment restores the previous balance.
+- `GET /finance/overview?month=YYYY-MM` returns billed and collected totals for the month, all-time outstanding, overdue count and status counts.
+- Audit events: `FEE_PLAN_CREATED`, `FEE_PLAN_UPDATED`, `FEE_PLAN_ARCHIVED`, `STUDENT_FEE_CREATED`, `STUDENT_FEE_UPDATED`, `STUDENT_FEES_GENERATED`, `PAYMENT_RECORDED`, `PAYMENT_DELETED`. Metadata carries ids and amounts only — no student names or free text.
+- Web UI: a Finance page with month summary cards, status chips, the plan table (edit, generate for a month, archive/reactivate, view fees) and a filterable fee-record table. Plan create/edit pages, a manual fee form, and a fee detail page with the payment history and a record-payment panel.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh the role grants.
+
+Verified: 307 unit tests, 138 mocked HTTP E2E tests, 106 real-database integration tests (including RLS on `fee_plans`, `student_fees` and `payments`), typecheck, lint, format, API build, `next build` and a browser walkthrough (create a class plan, generate a month, record a partial cash payment, settle by bank transfer, delete a payment, create and void a manual fee, archive/reactivate the plan and edit its amount).
+
+- [x] Implement fee structures.
+- [x] Implement student fee records.
+- [x] Implement monthly fee management.
+- [x] Implement cash payment recording.
+- [x] Implement bank payment recording.
+- [x] Implement payment history.
+- [x] Implement outstanding balance calculations.
 - [ ] Implement receipts.
 - [ ] Implement finance reports.
 

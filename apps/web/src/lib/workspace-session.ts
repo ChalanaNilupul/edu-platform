@@ -15,6 +15,7 @@ export type WorkspaceSummary = {
   id: string;
   name: string;
   type: 'TEACHER' | 'INSTITUTE';
+  currency: string;
   role: WorkspaceRole;
 };
 
@@ -95,4 +96,8 @@ export function canManageSubjects(role: WorkspaceRole) {
 
 export function canViewSubjects(role: WorkspaceRole) {
   return canViewStudents(role);
+}
+
+export function canManageFinance(role: WorkspaceRole) {
+  return role === 'OWNER' || role === 'ADMIN' || role === 'BRANCH_MANAGER';
 }

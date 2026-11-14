@@ -73,11 +73,13 @@ type DashboardUser = {
 
 type DashboardShellProps = {
   user: DashboardUser;
-  activePage?: 'Dashboard' | 'Workspaces' | 'Students' | 'Teachers' | 'Classes' | 'Subjects';
+  activePage?:
+    'Dashboard' | 'Workspaces' | 'Students' | 'Teachers' | 'Classes' | 'Subjects' | 'Finance';
   studentsHref?: string;
   teachersHref?: string;
   classesHref?: string;
   subjectsHref?: string;
+  financeHref?: string;
   children?: ReactNode;
 };
 
@@ -88,6 +90,7 @@ export function DashboardShell({
   teachersHref,
   classesHref,
   subjectsHref,
+  financeHref,
   children,
 }: DashboardShellProps) {
   const resolvedTeachersHref =
@@ -106,6 +109,12 @@ export function DashboardShell({
     subjectsHref ??
     (studentsHref?.endsWith('/students')
       ? `${studentsHref.slice(0, -'/students'.length)}/subjects`
+      : undefined);
+
+  const resolvedFinanceHref =
+    financeHref ??
+    (studentsHref?.endsWith('/students')
+      ? `${studentsHref.slice(0, -'/students'.length)}/finance`
       : undefined);
 
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -157,7 +166,9 @@ export function DashboardShell({
                       ? resolvedClassesHref
                       : item.label === 'Subjects'
                         ? resolvedSubjectsHref
-                        : item.href;
+                        : item.label === 'Finance'
+                          ? resolvedFinanceHref
+                          : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive

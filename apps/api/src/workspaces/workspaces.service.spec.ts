@@ -193,6 +193,7 @@ describe('WorkspacesService', () => {
             id: true,
             name: true,
             type: true,
+            currency: true,
             createdAt: true,
           },
         },

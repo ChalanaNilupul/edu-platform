@@ -98,6 +98,7 @@ export class WorkspacesService {
               id: true,
               name: true,
               type: true,
+              currency: true,
               createdAt: true,
             },
           },
@@ -123,6 +124,7 @@ export class WorkspacesService {
           id: true,
           name: true,
           type: true,
+          currency: true,
           createdAt: true,
         },
       });

@@ -7,6 +7,7 @@ import Joi from 'joi';
 import { AuthModule } from './auth/auth.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { ClassesModule } from './classes/classes.module.js';
+import { FinanceModule } from './finance/finance.module.js';
 import { GuardiansModule } from './guardians/guardians.module.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -46,6 +47,7 @@ import { WorkspacesModule } from './workspaces/workspaces.module.js';
     ClassesModule,
     TeachersModule,
     SubjectsModule,
+    FinanceModule,
   ],
   providers: [
     // Rate limiting is exercised separately; disable it for database integration
