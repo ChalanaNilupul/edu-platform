@@ -70,10 +70,14 @@ const membershipA2 = randomUUID();
 const membershipB1 = randomUUID();
 const profileA = randomUUID();
 const profileB = randomUUID();
+const classA = randomUUID();
+const classB = randomUUID();
+const assignmentA = randomUUID();
+const assignmentB = randomUUID();
 
 async function seed() {
   await query(
-    'TRUNCATE TABLE "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
   );
 
   const now = new Date().toISOString();
@@ -161,6 +165,35 @@ async function seed() {
        ($5, $7, $8, $9, true, $6, $6)`,
     [linkA, workspaceA, studentA, guardianA, linkB, now, workspaceB, studentB, guardianB],
   );
+
+  await query(
+    `INSERT INTO "classes"
+       ("id", "workspace_id", "name", "status", "created_at", "updated_at")
+     VALUES
+       ($1, $2, 'Class A', 'ACTIVE', $4, $4),
+       ($3, $5, 'Class B', 'ACTIVE', $4, $4)`,
+    [classA, workspaceA, classB, now, workspaceB],
+  );
+
+  await query(
+    `INSERT INTO "class_teachers"
+       ("id", "workspace_id", "class_id", "membership_id", "is_primary", "assigned_at",
+        "created_at", "updated_at")
+     VALUES
+       ($1, $2, $3, $4, true, CURRENT_DATE, $6, $6),
+       ($5, $7, $8, $9, true, CURRENT_DATE, $6, $6)`,
+    [
+      assignmentA,
+      workspaceA,
+      classA,
+      membershipA2,
+      assignmentB,
+      now,
+      workspaceB,
+      classB,
+      membershipB1,
+    ],
+  );
 }
 
 beforeAll(async () => {
@@ -185,6 +218,8 @@ describe('Row level security on tenant tables', () => {
       const guardians = await query('SELECT * FROM "guardians"');
       const links = await query('SELECT * FROM "student_guardians"');
       const profiles = await query('SELECT * FROM "teacher_profiles"');
+      const classes = await query('SELECT * FROM "classes"');
+      const assignments = await query('SELECT * FROM "class_teachers"');
 
       expect(memberships.rowCount).toBe(0);
       expect(invitations.rowCount).toBe(0);
@@ -192,6 +227,8 @@ describe('Row level security on tenant tables', () => {
       expect(guardians.rowCount).toBe(0);
       expect(links.rowCount).toBe(0);
       expect(profiles.rowCount).toBe(0);
+      expect(classes.rowCount).toBe(0);
+      expect(assignments.rowCount).toBe(0);
     });
   });
 
@@ -205,6 +242,8 @@ describe('Row level security on tenant tables', () => {
       const guardians = await query('SELECT "id", "workspace_id" FROM "guardians"');
       const links = await query('SELECT "id", "workspace_id" FROM "student_guardians"');
       const profiles = await query('SELECT "id", "workspace_id" FROM "teacher_profiles"');
+      const classes = await query('SELECT "id", "workspace_id" FROM "classes"');
+      const assignments = await query('SELECT "id", "workspace_id" FROM "class_teachers"');
 
       expect(memberships.rowCount).toBe(2);
       expect(memberships.rows.every((row) => row.workspace_id === workspaceA)).toBe(true);
@@ -213,6 +252,8 @@ describe('Row level security on tenant tables', () => {
       expect(guardians.rows.map((row) => row.id)).toEqual([guardianA]);
       expect(links.rows.map((row) => row.id)).toEqual([linkA]);
       expect(profiles.rows.map((row) => row.id)).toEqual([profileA]);
+      expect(classes.rows.map((row) => row.id)).toEqual([classA]);
+      expect(assignments.rows.map((row) => row.id)).toEqual([assignmentA]);
     });
   });
 
@@ -293,6 +334,20 @@ describe('Row level security on tenant tables', () => {
         ),
       ).rejects.toThrow(/row-level security policy/i);
     });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "class_teachers"
+             ("id", "workspace_id", "class_id", "membership_id", "is_primary", "assigned_at",
+              "created_at", "updated_at")
+           VALUES ($1, $2, $3, $4, true, CURRENT_DATE, now(), now())`,
+          [randomUUID(), workspaceB, classB, membershipB1],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
   });
 
   it('cannot update or delete another tenant rows', async () => {
@@ -318,6 +373,13 @@ describe('Row level security on tenant tables', () => {
       const removeProfiles = await query(`DELETE FROM "teacher_profiles" WHERE "id" = $1`, [
         profileB,
       ]);
+      const updateClasses = await query(
+        `UPDATE "classes" SET "name" = 'Intruder' WHERE "workspace_id" = $1`,
+        [workspaceB],
+      );
+      const removeAssignments = await query(`DELETE FROM "class_teachers" WHERE "id" = $1`, [
+        assignmentB,
+      ]);
 
       expect(update.rowCount).toBe(0);
       expect(remove.rowCount).toBe(0);
@@ -325,6 +387,8 @@ describe('Row level security on tenant tables', () => {
       expect(removeLinks.rowCount).toBe(0);
       expect(updateProfiles.rowCount).toBe(0);
       expect(removeProfiles.rowCount).toBe(0);
+      expect(updateClasses.rowCount).toBe(0);
+      expect(removeAssignments.rowCount).toBe(0);
     });
   });
 
@@ -338,6 +402,8 @@ describe('Row level security on tenant tables', () => {
       const guardians = await query('SELECT "id" FROM "guardians"');
       const links = await query('SELECT "id" FROM "student_guardians"');
       const profiles = await query('SELECT "id" FROM "teacher_profiles"');
+      const classes = await query('SELECT "id" FROM "classes"');
+      const assignments = await query('SELECT "id" FROM "class_teachers"');
 
       expect(memberships.rowCount).toBe(3);
       expect(invitations.rowCount).toBe(2);
@@ -345,6 +411,8 @@ describe('Row level security on tenant tables', () => {
       expect(guardians.rowCount).toBe(2);
       expect(links.rowCount).toBe(2);
       expect(profiles.rowCount).toBe(2);
+      expect(classes.rowCount).toBe(2);
+      expect(assignments.rowCount).toBe(2);
     });
   });
 

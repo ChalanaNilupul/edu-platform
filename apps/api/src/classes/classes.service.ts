@@ -270,11 +270,14 @@ export class ClassesService {
         throw new NotFoundException('Class not found');
       }
 
-      const enrollments = await tx.enrollment.count({ where: { workspaceId, classId } });
+      const [enrollments, teacherAssignments] = await Promise.all([
+        tx.enrollment.count({ where: { workspaceId, classId } }),
+        tx.classTeacher.count({ where: { workspaceId, classId } }),
+      ]);
 
-      if (enrollments > 0) {
+      if (enrollments > 0 || teacherAssignments > 0) {
         throw new ConflictException(
-          'Archive this class instead of deleting it while enrollment records exist',
+          'Archive this class instead of deleting it while enrollment or teacher assignment records exist',
         );
       }
 

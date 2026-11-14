@@ -46,6 +46,9 @@ describe('ClassesService', () => {
     enrollment: {
       count: vi.fn(),
     },
+    classTeacher: {
+      count: vi.fn(),
+    },
   };
 
   const tenantMock = {
@@ -304,6 +307,19 @@ describe('ClassesService', () => {
     it('refuses to delete a class that has enrollment records', async () => {
       tx.class.findFirst.mockResolvedValue({ id: CLASS_ID });
       tx.enrollment.count.mockResolvedValue(2);
+      tx.classTeacher.count.mockResolvedValue(0);
+
+      await expect(service.remove(ACTOR_ID, WORKSPACE_ID, CLASS_ID)).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      expect(tx.class.delete).not.toHaveBeenCalled();
+      expect(auditMock.record).not.toHaveBeenCalled();
+    });
+
+    it('refuses to delete a class that has teacher assignments', async () => {
+      tx.class.findFirst.mockResolvedValue({ id: CLASS_ID });
+      tx.enrollment.count.mockResolvedValue(0);
+      tx.classTeacher.count.mockResolvedValue(1);
 
       await expect(service.remove(ACTOR_ID, WORKSPACE_ID, CLASS_ID)).rejects.toBeInstanceOf(
         ConflictException,
@@ -315,6 +331,7 @@ describe('ClassesService', () => {
     it('deletes an empty class and records an audit event', async () => {
       tx.class.findFirst.mockResolvedValue({ id: CLASS_ID });
       tx.enrollment.count.mockResolvedValue(0);
+      tx.classTeacher.count.mockResolvedValue(0);
 
       await service.remove(ACTOR_ID, WORKSPACE_ID, CLASS_ID);
 

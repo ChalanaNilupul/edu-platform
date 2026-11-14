@@ -334,7 +334,7 @@ Verified: 178 unit tests, 75 mocked HTTP E2E tests, 54 real-database integration
 
 # Phase 4 — Teacher Management
 
-**Status: In progress — batch 1 (profiles and directory) delivered; class assignments and weekly availability remain**
+**Status: In progress — batches 1 (profiles and directory) and 2 (class-teacher assignments) delivered; weekly availability remains**
 
 ### Teacher profiles and directory notes (November 14, 2026)
 
@@ -350,11 +350,26 @@ Teachers are existing workspace members. Batch 1 adds a profile that hangs off t
 
 Verified: 191 unit tests, 81 mocked HTTP E2E tests, 61 real-database integration tests (including RLS on `teacher_profiles`), typecheck, lint, format, API build, `next build` and a browser walkthrough (owner adds a profile, teacher edits their own, student sees the restricted notice).
 
+### Class-teacher assignment notes (November 14, 2026)
+
+Assignments are append-only history: removing a teacher sets `ended_at` instead of deleting the row, so re-assignment creates a new period and the past stays visible to managers.
+
+- `class_teachers` table (migration `20261114122833_add_class_teachers`) with `class_id`, `membership_id`, `is_primary`, `assigned_at`, nullable `ended_at`, cascade foreign keys, tenant RLS, a partial unique index for one active row per class and teacher, and a second partial unique index for one active primary teacher per class.
+- Routes under `/workspaces/:workspaceId`: `GET`/`POST /classes/:classId/teachers`, `PATCH`/`DELETE /classes/:classId/teachers/:assignmentId` and `GET /teachers/:membershipId/classes`. Reads allow OWNER/ADMIN/BRANCH_MANAGER/TEACHER; assignment changes are manager-only.
+- Any active directory-eligible member (role TEACHER or holding a profile) can be assigned. Archived classes reject new assignments with 409, duplicate active assignments return 409, and memberships from another workspace return 404.
+- History visibility: current assignments are visible to every staff viewer, while past assignments are returned only to managers, even when `includeEnded=true` is requested.
+- Audit events `CLASS_TEACHER_ASSIGNED`, `CLASS_TEACHER_PRIMARY_CHANGED` and `CLASS_TEACHER_REMOVED` store the class id, membership id, primary flag and end date — no names.
+- Deleting a class with teacher-assignment rows now returns 409 with the archive hint, matching the existing enrollment rule.
+- Web UI: a Teachers card on the class detail page (active rows with a Primary badge, assign picker, make-primary/remove actions for managers, collapsed past teachers) and an Assigned classes card on the teacher detail page (current for all viewers, past for managers).
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh role grants.
+
+Verified: 212 unit tests, 90 mocked HTTP E2E tests, 70 real-database integration tests (including RLS on `class_teachers`), typecheck, lint, format, API build, `next build` and a browser walkthrough (owner assigns, promotes and removes a teacher; the teacher sees the class read-only and no past history).
+
 - [x] Implement teacher profiles.
 - [x] Implement teacher invitations (delivered with the Phase 2 invitation flow).
 - [x] Associate teachers with workspaces (Phase 2 memberships).
 - [x] Implement teacher membership and permissions (Phase 2 roles and guards).
-- [ ] Implement teacher assignments.
+- [x] Implement teacher assignments.
 - [ ] Implement teacher availability.
 - [x] Implement teacher directory.
 
@@ -364,7 +379,7 @@ Verified: 191 unit tests, 81 mocked HTTP E2E tests, 61 real-database integration
 
 - [ ] Implement class and batch creation.
 - [ ] Implement subject management.
-- [ ] Assign teachers to classes.
+- [x] Assign teachers to classes.
 - [x] Enroll students into classes.
 - [x] Implement class capacity.
 - [ ] Implement timetable management.

@@ -19,10 +19,11 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 3 Batch 4 is implemented: workspace-scoped classes and append-only enrollment history, with capacity/archive rules, roster and student-class views, audit events, and a role-aware classes UI.
 - Email-verification enforcement (security review finding M1) is implemented: workspace creation and invitation creation require `emailVerifiedAt` and return a 403 with a clear message otherwise; login and workspace switching stay open. Unverified users see a dashboard banner offering a resend.
 - Phase 4 Batch 1 is implemented: workspace-scoped teacher profiles attached to memberships (RLS included), a teachers directory/detail/profile API, audit events, and a role-aware web directory with add/edit profile pages.
+- Phase 4 Batch 2 is implemented: append-only class-teacher assignments with one active primary teacher per class, partial unique indexes, tenant RLS, manager-only assignment changes, audit events, and a Teachers card on the class page plus an Assigned classes card on the teacher page.
 - Runtime verification of rate limiting and Origin/CSRF checking is complete (November 13, 2026): the global 30 req/60s cap and the auth-route 5/min and 3/min limits return 429; unsafe requests with a foreign or missing Origin are rejected with 403; spoofed `X-Forwarded-For` does not reset the limit while `TRUST_PROXY=false`.
-- Verified by 191 unit tests, 81 mocked HTTP E2E tests, 61 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, and the unverified-email banner plus blocked workspace creation.
-- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 class-teacher assignments and weekly availability; the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs) and `11f3783` (email-verification enforcement) were pushed on `feat/phase-3-student-profiles`. Phase 4 batch 1 is committed on the same branch once approved; until then it exists only in the AI copy.
+- Verified by 212 unit tests, 90 mocked HTTP E2E tests, 70 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, and the unverified-email banner plus blocked workspace creation.
+- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 weekly availability; the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement) and `f72f091` (Phase 4 batch 1) were pushed on `feat/phase-3-student-profiles`. Phase 4 batch 2 exists only in the AI copy until reviewed and committed.
 
 ---
 
@@ -249,12 +250,12 @@ Join row linking a student to a guardian inside one workspace.
 
 ## Class
 
-Workspace-owned teaching group that students are enrolled into; it has no teacher assignment, schedule or subject yet.
+Workspace-owned teaching group that students are enrolled into; teacher assignment is handled by `ClassTeacher`, while schedules and subjects are still pending.
 
 - Fields: `name` (required), `grade`, `description`, `capacity` (optional, 1–1000), `status` (`ACTIVE`/`ARCHIVED`).
 - `(workspaceId, name)` is unique; indexes cover `(workspaceId, status)`.
 - `ON DELETE CASCADE` from `Workspace`; RLS is enabled and forced with the same tenant policy.
-- A class with any enrollment row cannot be deleted (409); archive it instead. Capacity is checked when enrolling or reactivating (completed/withdrawn rows do not count).
+- A class with any enrollment or teacher-assignment row cannot be deleted (409); archive it instead. Capacity is checked when enrolling or reactivating (completed/withdrawn rows do not count).
 
 ## Enrollment
 
@@ -274,6 +275,17 @@ Optional teaching profile for an existing workspace membership; it does not crea
 - Cascades from `Workspace` and `Membership`; RLS is enabled and forced with the same tenant policy.
 - Indexes cover `(workspaceId)`.
 - Managers (OWNER/ADMIN/BRANCH_MANAGER) may edit any profile; a teacher may edit only their own membership's profile. The directory lists role TEACHER members plus any member who has a profile.
+
+## ClassTeacher
+
+One row per teaching-assignment period between a class and a membership; removing a teacher ends the row rather than deleting it.
+
+- Fields: `workspaceId`, `classId`, `membershipId`, `isPrimary` (default false), `assignedAt` (date, defaults to today), `endedAt` (date, nullable).
+- A partial unique index on `(class_id, membership_id) WHERE ended_at IS NULL` allows at most one active assignment per teacher per class; a second partial unique index on `(class_id) WHERE ended_at IS NULL AND is_primary = true` enforces one active primary teacher per class. Unique violations map to 409.
+- Ending an assignment sets `endedAt`; reassignment inserts a new row, so history survives. Removed rows cannot be edited again (409).
+- Cascades from `Workspace`, `Class` and `Membership`. RLS is enabled and forced with the same tenant policy.
+- Indexes cover `(workspaceId, classId)` and `(workspaceId, membershipId)`.
+- Current assignments are readable by OWNER/ADMIN/BRANCH_MANAGER/TEACHER; past assignments are returned only to managers. Assignment changes are limited to OWNER/ADMIN/BRANCH_MANAGER, and archived classes reject new assignments.
 
 # 7. Authentication Implementation
 
@@ -485,7 +497,7 @@ Delivered in batch 4 (classes + enrollment history):
 
 # 9E. Phase 4 — Teacher Profiles and Directory Implementation
 
-Delivered in batch 1 (profiles + directory); class assignments (batch 2) and weekly availability (batch 3) remain:
+Delivered in batch 1 (profiles + directory); batch 2 covers class-teacher assignments (§9F) and weekly availability (batch 3) remains:
 
 - API: `apps/api/src/teachers/` (controller, service, DTOs, module), registered in `AppModule`. Routes under `/workspaces/:workspaceId/teachers`:
   - `GET /` — search across first name, last name, email, qualifications and specializations, optional membership status filter, `page`/`pageSize` (default 20, max 100), ordered by role then first name.
@@ -499,13 +511,29 @@ Delivered in batch 1 (profiles + directory); class assignments (batch 2) and wee
 - Web: `apps/web/src/lib/teachers.ts` (types, labels, name/initial helpers), `components/teacher-profile-form.tsx`; routes `teachers`, `teachers/[membershipId]` and `teachers/[membershipId]/edit`; a "Teachers" sidebar entry derived from `studentsHref`. Students and parents get a restricted notice; teachers get "Edit profile" only on their own record.
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to create the table, apply RLS and refresh role grants.
 
+# 9F. Phase 4 — Class-Teacher Assignments Implementation
+
+Delivered in batch 2. Assignments keep their history; weekly availability (batch 3) remains:
+
+- API: `apps/api/src/classes/class-teachers.controller.ts` and `class-teachers.service.ts`, registered in `ClassesModule` alongside the classes/enrollments controllers. Routes under `/workspaces/:workspaceId`:
+  - `GET /classes/:classId/teachers` — current assignments ordered primary-first; optional `includeEnded=true` adds past rows, but only for managers.
+  - `POST /classes/:classId/teachers` — assigns an active, directory-eligible membership; 201.
+  - `PATCH /classes/:classId/teachers/:assignmentId` — sets `isPrimary`; promoting clears any other active primary in the same class.
+  - `DELETE /classes/:classId/teachers/:assignmentId` — soft-ends the row via `endedAt`; the response includes the ended row.
+  - `GET /teachers/:membershipId/classes` — current classes for any staff viewer; past classes only for OWNER/ADMIN/BRANCH_MANAGER.
+- Business rules: class must exist in the workspace and be `ACTIVE` (409 otherwise); the target membership must be `ACTIVE` and either role TEACHER or profile-holder (404 otherwise); duplicate active assignment returns 409; ended assignments cannot be changed (409); deleting a class with assignments returns 409 and suggests archiving.
+- Audit: `CLASS_TEACHER_ASSIGNED`, `CLASS_TEACHER_PRIMARY_CHANGED` and `CLASS_TEACHER_REMOVED`, each recording `classId`, `membershipId` and the primary flag or end date after commit.
+- Migration: `20261114122833_add_class_teachers` (enum values, table, FKs, two partial unique indexes, RLS enabled/forced with the tenant policy).
+- Web: types in `apps/web/src/lib/classes.ts`; `components/assign-teacher-form.tsx` and `components/class-teacher-actions.tsx`; the class detail page fetches the assignment list (with history for managers) and the teacher directory for the picker; the teacher detail page fetches `/teachers/:membershipId/classes`.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh role grants.
+
 # 10. Testing Status
 
-Current verified results after Phase 4 batch 1:
+Current verified results after Phase 4 batch 2:
 
 ## Unit Tests
 
-191 tests passed across 17 files:
+212 tests passed across 18 files:
 
 - Authentication service.
 - Workspace service.
@@ -516,7 +544,8 @@ Current verified results after Phase 4 batch 1:
 - Students import service (17 tests covering report shape, per-row errors, in-file and existing duplicates, import counts, blocked invalid files, limits and role rejection).
 - CSV parser (9 tests covering quoting, escapes, embedded newlines, BOM, CRLF, line numbers and malformed input).
 - Guardians service.
-- Classes service (16 tests covering list/search/pagination, duplicate names, diffed updates, delete guard and role checks).
+- Classes service (17 tests covering list/search/pagination, duplicate names, diffed updates, delete guard including teacher assignments and role checks).
+- Class-teachers service (20 tests covering class and teacher views, manager-only history, assignment validation, primary moves, soft-end history and role checks).
 - Enrollments service (19 tests covering capacity, archived classes, history, status transitions, `endedAt` handling, duplicate 409 and role checks).
 - Teachers service (11 tests covering directory eligibility, search/status/pagination, detail 404s, profile creation and update, empty-payload rejection, and manager vs teacher-self authorization).
 - Session guard.
@@ -527,7 +556,7 @@ Current verified results after Phase 4 batch 1:
 
 ## E2E HTTP Tests
 
-81 tests passed across 7 files:
+90 tests passed across 8 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
@@ -535,11 +564,12 @@ Current verified results after Phase 4 batch 1:
 - Guardians E2E (12).
 - Classes and enrollment E2E (14).
 - Teachers E2E (6: unauthenticated refusal, directory query parameters, detail, manager profile update, invalid payload, student refusal).
+- Class teachers E2E (9: unauthenticated refusal, list history flag, assign, missing membership id, primary patch, remove, teacher history, malformed id, student refusal).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-61 tests passed against a real PostgreSQL 17 database:
+70 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
@@ -547,7 +577,8 @@ Current verified results after Phase 4 batch 1:
 - 6 import tests: validate/import with in-file and existing duplicates (including that a repeat import never overwrites), rejected invalid files with no writes, per-workspace code scoping, malformed CSV messages, teacher refusal and outsider/unauthenticated access.
 - 8 classes/enrollment tests: class lifecycle with audit metadata, capacity and archived-class rules, enrollment history including re-enrollment ordering, teacher read-only access, cross-workspace isolation, invalid data, duplicate active enrollment and unauthenticated access.
 - 5 teacher tests: directory + profile create/detail with audit metadata, teacher self-edit but not another member, manager profiling a non-teaching member, student/non-member refusal, and cross-workspace directory isolation.
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments and teacher profiles), cross-tenant update/delete, system bypass and no leakage between transactions.
+- 9 class-teacher tests: primary assignment visible from both the class and teacher views with audit metadata, primary movement, soft-end/history/reassign, manager-only history (teacher list and class page with `includeEnded=true`), duplicate/archived/ineligible/missing teacher rules, teacher read-only access with student/outsider refusal, cross-workspace isolation, class delete guard and invalid payloads.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles and class-teacher assignments), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -647,7 +678,7 @@ Implemented already: tenant context resolution through the session's active work
 
 ## Phase 4 Remaining Work
 
-- Batch 1 (profiles + directory) is delivered. Class-teacher assignments and weekly availability are the remaining Phase 4 batches; assignments belong in the class detail UI and availability needs a weekly grid with overlap checks.
+- Batch 1 (profiles + directory) and batch 2 (class-teacher assignments) are delivered. Weekly availability is the remaining Phase 4 batch; it needs a weekly grid with overlap checks.
 - Teacher invitations reuse the Phase 2 invitation flow, so no teacher-specific invite screen exists.
 - The Teachers sidebar entry follows the same rule as Students and Classes: it needs an active workspace before it becomes a link.
 
@@ -873,9 +904,9 @@ Follow this order:
 1. Finish manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset.
 2. ~~Verify rate limiting and Origin checking at runtime.~~ Done November 13, 2026 — see §11.
 3. ~~Decide whether to extend email-verification enforcement beyond invitation acceptance.~~ Done November 13, 2026 — enforced for workspace creation and invitations; login and workspace switching stay open.
-4. Phase 4 batch 1 (teacher profiles + directory) is delivered and awaiting review/commit. Next: batch 2 class-teacher assignments, then batch 3 weekly availability.
+4. Phase 4 batch 1 (teacher profiles + directory) and batch 2 (class-teacher assignments) are delivered and awaiting review/commit. Next: batch 3 weekly availability.
 
-The Phase 2 runtime security checks, the M1 scope decision and Phase 4 batch 1 are closed. Remaining before Phase 4 batch 2 is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred guardian reuse polish.
+The Phase 2 runtime security checks, the M1 scope decision and Phase 4 batches 1–2 are closed. Remaining before batch 3 is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred guardian reuse polish.
 
 # 17. Development Rules for AI Assistance
 

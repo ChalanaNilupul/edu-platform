@@ -94,6 +94,9 @@ enum AuditEventType {
   ENROLLMENT_UPDATED
   TEACHER_PROFILE_CREATED
   TEACHER_PROFILE_UPDATED
+  CLASS_TEACHER_ASSIGNED
+  CLASS_TEACHER_PRIMARY_CHANGED
+  CLASS_TEACHER_REMOVED
 }
 
 model User {
@@ -131,6 +134,7 @@ model Workspace {
   classes          Class[]
   enrollments      Enrollment[]
   teacherProfiles  TeacherProfile[]
+  classTeachers    ClassTeacher[]
   activeSessions   Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -224,6 +228,7 @@ model Class {
 
   workspace   Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   enrollments Enrollment[]
+  teachers    ClassTeacher[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -253,6 +258,28 @@ model Enrollment {
   @@map("enrollments")
 }
 
+/// One row per teaching assignment period. Removing a teacher ends the row,
+/// so reassigning later inserts a new one and the history stays intact.
+model ClassTeacher {
+  id           String    @id @default(uuid())
+  workspaceId  String    @map("workspace_id")
+  classId      String    @map("class_id")
+  membershipId String    @map("membership_id")
+  isPrimary    Boolean   @default(false) @map("is_primary")
+  assignedAt   DateTime  @default(now()) @map("assigned_at") @db.Date
+  endedAt      DateTime? @map("ended_at") @db.Date
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  class      Class      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  membership Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, classId])
+  @@index([workspaceId, membershipId])
+  @@map("class_teachers")
+}
+
 model Membership {
   id          String           @id @default(uuid())
   userId      String           @map("user_id")
@@ -266,6 +293,7 @@ model Membership {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Restrict)
 
   teacherProfile TeacherProfile?
+  classAssignments ClassTeacher[]
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])

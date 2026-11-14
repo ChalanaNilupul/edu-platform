@@ -1,3 +1,5 @@
+import type { MembershipStatus, WorkspaceRole } from './teachers';
+
 export const CLASS_STATUSES = ['ACTIVE', 'ARCHIVED'] as const;
 
 export type ClassStatus = (typeof CLASS_STATUSES)[number];
@@ -57,6 +59,40 @@ export type EnrollmentListResponse = {
   pageSize: number;
   total: number;
   totalPages: number;
+};
+
+export type ClassTeacherAssignment = {
+  id: string;
+  classId: string;
+  membershipId: string;
+  isPrimary: boolean;
+  assignedAt: string;
+  endedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  class: {
+    id: string;
+    name: string;
+    grade: string | null;
+    status: ClassStatus;
+  };
+  membership: {
+    id: string;
+    role: WorkspaceRole;
+    status: MembershipStatus;
+    user: {
+      id: string;
+      firstName: string;
+      lastName: string | null;
+      email: string;
+    };
+    teacherProfile: { specializations: string[] } | null;
+  };
+};
+
+export type ClassTeacherListResponse = {
+  items: ClassTeacherAssignment[];
+  past: ClassTeacherAssignment[];
 };
 
 export const classStatusLabels: Record<ClassStatus, string> = {

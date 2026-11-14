@@ -1,9 +1,19 @@
 export const instant = false;
 
 import Link from 'next/link';
-import { ArrowLeft, ChevronLeft, ChevronRight, Pencil, Search, Users } from 'lucide-react';
+import {
+  ArrowLeft,
+  ChevronLeft,
+  ChevronRight,
+  GraduationCap,
+  Pencil,
+  Search,
+  Users,
+} from 'lucide-react';
 
+import { AssignTeacherForm } from '@/components/assign-teacher-form';
 import { ClassActions } from '@/components/class-actions';
+import { ClassTeacherActions } from '@/components/class-teacher-actions';
 import { DashboardShell } from '@/components/dashboard-shell';
 import { EnrollStudentForm } from '@/components/enroll-student-form';
 import { EnrollmentActions } from '@/components/enrollment-actions';
@@ -16,11 +26,13 @@ import {
   enrollmentStatusClasses,
   enrollmentStatusLabels,
   type ClassRecord,
+  type ClassTeacherListResponse,
   type EnrollmentListResponse,
   type EnrollmentStatus,
 } from '@/lib/classes';
 import { formatDate } from '@/lib/format-date';
 import { studentFullName } from '@/lib/student';
+import { roleLabels, teacherName, type TeacherListResponse } from '@/lib/teachers';
 import { canManageClasses, canViewClasses, getWorkspaceSession } from '@/lib/workspace-session';
 
 const PAGE_SIZE = 20;
@@ -125,27 +137,49 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     rosterParams.set('status', status);
   }
 
-  const [rosterResponse, activeResponse] = await Promise.all([
-    fetch(
-      `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
-      { headers, cache: 'no-store' },
-    ),
-    canManage && schoolClass.status === 'ACTIVE'
-      ? fetch(
-          `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?status=ACTIVE&pageSize=${LOOKUP_PAGE_SIZE}`,
-          { headers, cache: 'no-store' },
-        )
-      : null,
-  ]);
+  const [rosterResponse, activeResponse, teachersResponse, teacherDirectoryResponse] =
+    await Promise.all([
+      fetch(
+        `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
+        { headers, cache: 'no-store' },
+      ),
+      canManage && schoolClass.status === 'ACTIVE'
+        ? fetch(
+            `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?status=ACTIVE&pageSize=${LOOKUP_PAGE_SIZE}`,
+            { headers, cache: 'no-store' },
+          )
+        : null,
+      fetch(
+        `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/teachers${
+          canManage ? '?includeEnded=true' : ''
+        }`,
+        { headers, cache: 'no-store' },
+      ),
+      canManage && schoolClass.status === 'ACTIVE'
+        ? fetch(
+            `${apiUrl}/workspaces/${currentWorkspace.id}/teachers?pageSize=${LOOKUP_PAGE_SIZE}`,
+            { headers, cache: 'no-store' },
+          )
+        : null,
+    ]);
 
   if (!rosterResponse.ok) {
     throw new Error('Unable to load the class roster.');
+  }
+
+  if (!teachersResponse.ok) {
+    throw new Error('Unable to load the class teachers.');
   }
 
   const roster = (await rosterResponse.json()) as EnrollmentListResponse;
   const enrolledStudentIds =
     activeResponse && activeResponse.ok
       ? ((await activeResponse.json()) as EnrollmentListResponse).items.map((row) => row.studentId)
+      : [];
+  const classTeachers = (await teachersResponse.json()) as ClassTeacherListResponse;
+  const teacherDirectory =
+    teacherDirectoryResponse && teacherDirectoryResponse.ok
+      ? ((await teacherDirectoryResponse.json()) as TeacherListResponse).items
       : [];
 
   function rosterHref(targetPage: number) {
@@ -264,6 +298,133 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
           )}
         </section>
       ) : null}
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Teachers</h2>
+            <p className="mt-1 text-sm text-slate-500">Staff currently assigned to this class.</p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            {classTeachers.items.length} assigned
+          </span>
+        </div>
+
+        {classTeachers.items.length === 0 ? (
+          <div className="mt-4 flex min-h-32 flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 px-6 text-center">
+            <GraduationCap size={28} className="text-slate-400" />
+            <p className="mt-2 text-sm font-medium text-slate-700">No teachers assigned yet</p>
+            <p className="mt-1 text-xs text-slate-500">
+              {canManage
+                ? 'Assign the teacher who runs this class.'
+                : 'A manager has not assigned a teacher to this class yet.'}
+            </p>
+          </div>
+        ) : (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full min-w-[640px] text-left text-sm">
+              <thead>
+                <tr className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  <th className="px-3 py-3">Teacher</th>
+                  <th className="px-3 py-3">Role</th>
+                  <th className="px-3 py-3">Assigned</th>
+                  {canManage ? <th className="px-3 py-3">Actions</th> : null}
+                </tr>
+              </thead>
+
+              <tbody>
+                {classTeachers.items.map((assignment) => (
+                  <tr key={assignment.id} className="border-t border-slate-100">
+                    <td className="px-3 py-4">
+                      <Link
+                        href={`/workspaces/${currentWorkspace.id}/teachers/${assignment.membership.id}`}
+                        className="font-semibold text-slate-900 transition hover:text-blue-600"
+                      >
+                        {teacherName(assignment.membership)}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {assignment.membership.user.email}
+                      </p>
+                    </td>
+                    <td className="px-3 py-4">
+                      <span className="text-slate-700">
+                        {roleLabels[assignment.membership.role]}
+                      </span>
+                      {assignment.isPrimary ? (
+                        <span className="ml-2 inline-flex rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
+                          Primary
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-4 text-slate-700">
+                      {formatDate(assignment.assignedAt)}
+                    </td>
+                    {canManage ? (
+                      <td className="px-3 py-4">
+                        <ClassTeacherActions
+                          workspaceId={currentWorkspace.id}
+                          classId={schoolClass.id}
+                          assignmentId={assignment.id}
+                          teacherName={teacherName(assignment.membership)}
+                          isPrimary={assignment.isPrimary}
+                        />
+                      </td>
+                    ) : null}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {canManage ? (
+          schoolClass.status === 'ACTIVE' ? (
+            <div className="mt-6 border-t border-slate-100 pt-4">
+              <h3 className="text-sm font-semibold text-slate-900">Assign a teacher</h3>
+              <div className="mt-3">
+                <AssignTeacherForm
+                  workspaceId={currentWorkspace.id}
+                  classId={schoolClass.id}
+                  teachers={teacherDirectory}
+                  assignedMembershipIds={classTeachers.items.map((row) => row.membershipId)}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">
+              This class is archived. Reactivate it to assign new teachers.
+            </p>
+          )
+        ) : null}
+
+        {canManage && classTeachers.past.length > 0 ? (
+          <details className="mt-6 border-t border-slate-100 pt-4">
+            <summary className="cursor-pointer text-sm font-semibold text-slate-700">
+              Past teachers ({classTeachers.past.length})
+            </summary>
+
+            <ul className="mt-3 space-y-2">
+              {classTeachers.past.map((assignment) => (
+                <li
+                  key={assignment.id}
+                  className="flex flex-col gap-1 rounded-lg bg-slate-50 px-3 py-2 text-sm sm:flex-row sm:items-center sm:justify-between"
+                >
+                  <Link
+                    href={`/workspaces/${currentWorkspace.id}/teachers/${assignment.membership.id}`}
+                    className="font-medium text-slate-800 transition hover:text-blue-600"
+                  >
+                    {teacherName(assignment.membership)}
+                  </Link>
+                  <span className="text-xs text-slate-500">
+                    {formatDate(assignment.assignedAt)} –{' '}
+                    {assignment.endedAt ? formatDate(assignment.endedAt) : '—'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
+      </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
