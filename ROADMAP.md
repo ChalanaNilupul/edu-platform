@@ -512,7 +512,7 @@ Verified: 320 unit tests, 144 mocked HTTP E2E tests, 110 real-database integrati
 
 # Phase 8 — Learning Management
 
-**Status: In progress — batch 1 (lessons and learning materials) delivered**
+**Status: In progress — batch 1 (lessons and learning materials) delivered, workspace Learning hub live**
 
 ### Lessons and learning materials (November 14, 2026)
 
@@ -525,6 +525,14 @@ Migration `20261114220000_add_lessons` adds `lessons` and `lesson_materials` wit
 - Audit events: `LESSON_CREATED`, `LESSON_UPDATED` (changed field names only), `LESSON_DELETED`, `LESSON_MATERIAL_CREATED`, `LESSON_MATERIAL_UPDATED`, `LESSON_MATERIAL_DELETED`. No titles or URLs in metadata.
 - Web UI: a Lessons card on the class detail page (between Subjects and Weekly timetable) with a create form (title, date, subject from the class's active links, description) and a list showing date, subject, author, material count and status. A lesson detail page shows the materials manager (add/edit/remove) and Publish/Move to draft/Delete actions. Archived classes show a read-only note and no write controls.
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration.
+
+### Workspace Learning hub (November 15, 2026)
+
+- `GET /workspaces/:workspaceId/lessons` lists lessons across every class in the workspace (paginated, newest lesson date first, `page`/`pageSize` up to 100) with an optional `classId` and `status` filter; each row carries a `class` summary (`id`, `name`, `status`). Reads allow OWNER, manager roles and teachers.
+- The **Learning** sidebar item is now live at `/workspaces/:workspaceId/learning`: a class/status filter (applied via query string, with Clear), a "Showing X–Y of Z" counter, a table of lesson, class, date, material count, status and author, and Previous/Next pagination that preserves filters. Lesson and class names link through to their detail pages. Users without students/grades access see a restricted notice.
+- Examinations and Reports sidebar placeholders remain disabled until their phases begin.
+
+Verified: 339 unit tests, 155 mocked HTTP E2E tests, 117 real-database integration tests, typecheck, lint, format, API build, `next build` (includes `/workspaces/[workspaceId]/learning`) and a browser walkthrough (23 seeded lessons paginated 20 + 3, class and status filters, empty-filter state with clear link, page 2 navigation, lesson detail reachable, sidebar Learning link present).
 
 Verified: 337 unit tests, 153 mocked HTTP E2E tests, 116 real-database integration tests (including RLS on `lessons` and `lesson_materials`), typecheck, lint, format, API build, `next build` and a browser walkthrough (create a lesson, open its detail page, add PDF and video materials, reject an invalid URL, publish and move to draft, edit and remove a material, delete a lesson, archive a class into read-only mode and reactivate it, and teacher access both without an assignment — 403 on create, read-only list — and with one — create allowed, write controls hidden).
 
