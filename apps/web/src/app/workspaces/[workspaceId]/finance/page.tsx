@@ -433,8 +433,12 @@ export default async function FinancePage({ params, searchParams }: FinancePageP
           </Link>
         </div>
 
-        <form method="get" className="mt-5 grid gap-3 lg:grid-cols-6">
-          <div className="relative lg:col-span-2">
+        <form
+          method="get"
+          className="mt-5 grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12"
+        >
+          {/* Search */}
+          <div className="relative min-w-0 sm:col-span-2 xl:col-span-3">
             <Search
               size={16}
               className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
@@ -444,14 +448,15 @@ export default async function FinancePage({ params, searchParams }: FinancePageP
               name="search"
               defaultValue={search}
               placeholder="Search student name or code"
-              className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full min-w-0 rounded-lg border border-slate-300 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
           </div>
 
+          {/* Status */}
           <select
             name="status"
             defaultValue={status}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 xl:col-span-2"
           >
             <option value="">All statuses</option>
             {FEE_STATUSES.map((option) => (
@@ -461,10 +466,11 @@ export default async function FinancePage({ params, searchParams }: FinancePageP
             ))}
           </select>
 
+          {/* Plan */}
           <select
             name="planId"
             defaultValue={planId}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 xl:col-span-2"
           >
             <option value="">All plans</option>
             {plans.items.map((plan) => (
@@ -474,10 +480,11 @@ export default async function FinancePage({ params, searchParams }: FinancePageP
             ))}
           </select>
 
+          {/* Class */}
           <select
             name="classId"
             defaultValue={classId}
-            className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+            className="w-full min-w-0 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100 xl:col-span-2"
           >
             <option value="">All classes</option>
             {classes.items.map((schoolClass) => (
@@ -487,17 +494,18 @@ export default async function FinancePage({ params, searchParams }: FinancePageP
             ))}
           </select>
 
-          <div className="flex gap-2">
+          {/* Month + Apply */}
+          <div className="flex min-w-0 gap-2 sm:col-span-2 xl:col-span-3">
             <input
               type="month"
               name="month"
               defaultValue={month}
               aria-label="Billing month"
-              className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
+              className="w-full min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-100"
             />
             <button
               type="submit"
-              className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              className="shrink-0 rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
               Apply
             </button>
