@@ -24,6 +24,7 @@ function paymentRow(overrides: Record<string, unknown> = {}) {
   return {
     id: PAYMENT_ID,
     studentFeeId: FEE_ID,
+    receiptNumber: 1,
     amount: new Prisma.Decimal('2000.00'),
     method: PaymentMethod.CASH,
     paidAt: new Date('2026-11-10T00:00:00.000Z'),
@@ -65,6 +66,37 @@ function detailRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function receiptRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: PAYMENT_ID,
+    receiptNumber: 3,
+    amount: new Prisma.Decimal('2000.00'),
+    method: PaymentMethod.BANK,
+    paidAt: new Date('2026-11-10T00:00:00.000Z'),
+    reference: 'SLIP-123',
+    note: 'Front desk',
+    createdAt: new Date('2026-11-10T09:00:00.000Z'),
+    recordedBy: { id: MEMBERSHIP_ID, user: { firstName: 'Sarath', lastName: 'Admin' } },
+    studentFee: {
+      id: FEE_ID,
+      description: 'November tuition',
+      amount: new Prisma.Decimal('5000.00'),
+      paidAmount: new Prisma.Decimal('2000.00'),
+      status: FeeStatus.PARTIAL,
+      periodMonth: new Date('2026-11-01T00:00:00.000Z'),
+      dueDate: new Date('2026-11-30T00:00:00.000Z'),
+      student: {
+        id: STUDENT_ID,
+        studentCode: 'S-001',
+        firstName: 'Amara',
+        lastName: 'Silva',
+      },
+      class: { id: 'class-123', name: 'Grade 8' },
+    },
+    ...overrides,
+  };
+}
+
 describe('PaymentsService', () => {
   const tx = {
     $queryRaw: vi.fn(),
@@ -78,6 +110,8 @@ describe('PaymentsService', () => {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    workspace: { findUnique: vi.fn() },
+    workspaceCounter: { upsert: vi.fn() },
   };
 
   const tenantMock = {
@@ -122,6 +156,12 @@ describe('PaymentsService', () => {
     tx.payment.create.mockResolvedValue(paymentRow());
     tx.payment.aggregate.mockResolvedValue({ _sum: { amount: new Prisma.Decimal('2000.00') } });
     tx.studentFee.findFirst.mockResolvedValue(detailRow());
+    tx.workspaceCounter.upsert.mockResolvedValue({ value: 1 });
+    tx.workspace.findUnique.mockResolvedValue({
+      id: WORKSPACE_ID,
+      name: 'Institute',
+      currency: 'LKR',
+    });
     auditMock.record.mockResolvedValue(undefined);
 
     service = new PaymentsService(
@@ -140,6 +180,7 @@ describe('PaymentsService', () => {
 
     const args = tx.payment.create.mock.calls[0]?.[0] as {
       data: {
+        receiptNumber: number;
         amount: Prisma.Decimal;
         method: PaymentMethod;
         paidAt: Date;
@@ -147,10 +188,19 @@ describe('PaymentsService', () => {
       };
     };
 
+    expect(args.data.receiptNumber).toBe(1);
     expect(args.data.amount.toString()).toBe('2000');
     expect(args.data.method).toBe(PaymentMethod.CASH);
     expect(args.data.paidAt).toEqual(new Date('2026-11-10T00:00:00.000Z'));
     expect(args.data.recordedByMembershipId).toBe(MEMBERSHIP_ID);
+    expect(tx.workspaceCounter.upsert).toHaveBeenCalledWith({
+      where: {
+        workspaceId_key: { workspaceId: WORKSPACE_ID, key: 'payment_receipt' },
+      },
+      create: { workspaceId: WORKSPACE_ID, key: 'payment_receipt', value: 1 },
+      update: { value: { increment: 1 } },
+      select: { value: true },
+    });
     expect(tx.studentFee.update).toHaveBeenCalledWith({
       where: { id: FEE_ID },
       data: {
@@ -160,13 +210,45 @@ describe('PaymentsService', () => {
     });
     expect(outcome.fee).toMatchObject({ paidAmount: '2000.00', balance: '3000.00' });
     expect(outcome.payment.amount).toBe('2000.00');
+    expect(outcome.payment.receiptNo).toBe('RCPT-000001');
+    expect(outcome.fee.payments[0]?.receiptNo).toBe('RCPT-000001');
     expect(auditMock.record).toHaveBeenCalledWith({
       type: AuditEventType.PAYMENT_RECORDED,
       actorUserId: ACTOR_ID,
       workspaceId: WORKSPACE_ID,
       targetId: FEE_ID,
-      metadata: { paymentId: PAYMENT_ID, amount: '2000.00', method: PaymentMethod.CASH },
+      metadata: {
+        paymentId: PAYMENT_ID,
+        receiptNo: 'RCPT-000001',
+        amount: '2000.00',
+        method: PaymentMethod.CASH,
+      },
     });
+  });
+
+  it('continues the workspace receipt sequence', async () => {
+    tx.workspaceCounter.upsert.mockResolvedValue({ value: 7 });
+    tx.payment.create.mockResolvedValue(paymentRow({ receiptNumber: 7 }));
+
+    const outcome = await service.record(ACTOR_ID, WORKSPACE_ID, FEE_ID, {
+      amount: '2000',
+      method: PaymentMethod.CASH,
+      paidAt: '2026-11-10',
+    });
+
+    expect(outcome.payment.receiptNo).toBe('RCPT-000007');
+  });
+
+  it('does not draw a receipt number for rejected payments', async () => {
+    await expect(
+      service.record(ACTOR_ID, WORKSPACE_ID, FEE_ID, {
+        amount: '6000',
+        method: PaymentMethod.BANK,
+        paidAt: '2026-11-10',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tx.workspaceCounter.upsert).not.toHaveBeenCalled();
   });
 
   it('rejects overpayments and voided fees', async () => {
@@ -241,7 +323,12 @@ describe('PaymentsService', () => {
       actorUserId: ACTOR_ID,
       workspaceId: WORKSPACE_ID,
       targetId: FEE_ID,
-      metadata: { paymentId: PAYMENT_ID, amount: '2000.00', method: PaymentMethod.CASH },
+      metadata: {
+        paymentId: PAYMENT_ID,
+        receiptNo: 'RCPT-000001',
+        amount: '2000.00',
+        method: PaymentMethod.CASH,
+      },
     });
   });
 
@@ -253,5 +340,47 @@ describe('PaymentsService', () => {
     );
 
     expect(tx.payment.delete).not.toHaveBeenCalled();
+  });
+
+  describe('getReceipt', () => {
+    it('renders a receipt with the current fee balance', async () => {
+      tx.payment.findFirst.mockResolvedValue(receiptRow());
+
+      const receipt = await service.getReceipt(ACTOR_ID, WORKSPACE_ID, PAYMENT_ID);
+
+      expect(tx.payment.findFirst).toHaveBeenCalledWith({
+        where: { id: PAYMENT_ID, workspaceId: WORKSPACE_ID },
+        select: expect.any(Object),
+      });
+      expect(receipt).toMatchObject({
+        receiptNo: 'RCPT-000003',
+        amount: '2000.00',
+        method: PaymentMethod.BANK,
+        paidAt: '2026-11-10',
+        reference: 'SLIP-123',
+        recordedBy: 'Sarath Admin',
+        workspace: { id: WORKSPACE_ID, name: 'Institute', currency: 'LKR' },
+        student: { id: STUDENT_ID, name: 'Amara Silva', studentCode: 'S-001' },
+        class: { id: 'class-123', name: 'Grade 8' },
+        fee: {
+          id: FEE_ID,
+          description: 'November tuition',
+          amount: '5000.00',
+          paidAmount: '2000.00',
+          balance: '3000.00',
+          status: FeeStatus.PARTIAL,
+          periodMonth: '2026-11',
+          dueDate: '2026-11-30',
+        },
+      });
+    });
+
+    it('returns 404 when the payment is not in the workspace', async () => {
+      tx.payment.findFirst.mockResolvedValue(null);
+
+      await expect(service.getReceipt(ACTOR_ID, WORKSPACE_ID, PAYMENT_ID)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
   });
 });

@@ -269,7 +269,11 @@ describe('Finance integration', () => {
       balance: '3000.00',
       status: 'PARTIAL',
     });
-    expect(cash.body.payment).toMatchObject({ method: 'CASH', paidAt: '2026-11-10' });
+    expect(cash.body.payment).toMatchObject({
+      method: 'CASH',
+      paidAt: '2026-11-10',
+      receiptNo: 'RCPT-000001',
+    });
 
     const bank = await post(
       owner.client,
@@ -287,6 +291,7 @@ describe('Finance integration', () => {
       balance: '0.00',
       status: 'PAID',
     });
+    expect(bank.body.payment.receiptNo).toBe('RCPT-000002');
 
     const overpaid = await post(
       owner.client,
@@ -301,7 +306,11 @@ describe('Finance integration', () => {
 
     expect(history.status).toBe(200);
     expect(history.body.payments).toHaveLength(2);
-    expect(history.body.payments[0]).toMatchObject({ method: 'BANK', reference: 'SLIP-123' });
+    expect(history.body.payments[0]).toMatchObject({
+      method: 'BANK',
+      reference: 'SLIP-123',
+      receiptNo: 'RCPT-000002',
+    });
     expect(history.body.payments[0].recordedBy.name).toBe('Test');
 
     const removed = await del(
@@ -331,16 +340,209 @@ describe('Finance integration', () => {
       ).status,
     ).toBe(404);
 
+    // Deleting a payment retires its number instead of releasing it.
+    const reissued = await post(
+      owner.client,
+      `/workspaces/${workspace.id}/finance/fees/${fee.body.id}/payments`,
+    ).send({ amount: '500.00', method: 'CASH', paidAt: '2026-11-12' });
+
+    expect(reissued.status).toBe(201);
+    expect(reissued.body.payment.receiptNo).toBe('RCPT-000003');
+
     expect(
       await context.prisma.auditEvent.count({
         where: { type: 'PAYMENT_RECORDED', workspaceId: workspace.id },
       }),
-    ).toBe(2);
+    ).toBe(3);
     expect(
       await context.prisma.auditEvent.count({
         where: { type: 'PAYMENT_DELETED', workspaceId: workspace.id },
       }),
     ).toBe(1);
+  });
+
+  it('numbers receipts per workspace and renders a printable receipt', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const amara = await createStudent(owner.client, workspace.id, 'Amara');
+
+    const fee = await post(owner.client, `/workspaces/${workspace.id}/finance/fees`).send({
+      studentId: amara.id,
+      description: 'Admission fee',
+      amount: '5000.00',
+      dueDate: '2026-11-30',
+    });
+
+    const paid = await post(
+      owner.client,
+      `/workspaces/${workspace.id}/finance/fees/${fee.body.id}/payments`,
+    ).send({
+      amount: '2000.00',
+      method: 'BANK',
+      paidAt: '2026-11-10',
+      reference: 'SLIP-9',
+    });
+
+    expect(paid.status).toBe(201);
+    expect(paid.body.payment.receiptNo).toBe('RCPT-000001');
+
+    const receipt = await owner.client.get(
+      `/api/v1/workspaces/${workspace.id}/finance/payments/${paid.body.payment.id}/receipt`,
+    );
+
+    expect(receipt.status).toBe(200);
+    expect(receipt.body).toMatchObject({
+      receiptNo: 'RCPT-000001',
+      amount: '2000.00',
+      method: 'BANK',
+      paidAt: '2026-11-10',
+      reference: 'SLIP-9',
+      recordedBy: 'Test',
+      workspace: { id: workspace.id, name: 'Institute', currency: 'LKR' },
+      student: { id: amara.id, name: 'Amara', studentCode: null },
+      fee: {
+        id: fee.body.id,
+        description: 'Admission fee',
+        amount: '5000.00',
+        paidAmount: '2000.00',
+        balance: '3000.00',
+        status: 'PARTIAL',
+        periodMonth: null,
+        dueDate: '2026-11-30',
+      },
+    });
+    expect(receipt.body.class).toBeNull();
+
+    // A second workspace starts its own sequence at 1.
+    const other = await registerVerifiedUser(context, 'other@example.com');
+    const otherWorkspace = await createWorkspace(other.client, 'Other', 'INSTITUTE');
+    const binod = await createStudent(other.client, otherWorkspace.id, 'Binod');
+
+    expect(
+      (
+        await other.client.get(
+          `/api/v1/workspaces/${otherWorkspace.id}/finance/payments/${paid.body.payment.id}/receipt`,
+        )
+      ).status,
+    ).toBe(404);
+
+    const otherFee = await post(other.client, `/workspaces/${otherWorkspace.id}/finance/fees`).send(
+      {
+        studentId: binod.id,
+        description: 'Admission fee',
+        amount: '1000.00',
+        dueDate: '2026-11-30',
+      },
+    );
+    const otherPayment = await post(
+      other.client,
+      `/workspaces/${otherWorkspace.id}/finance/fees/${otherFee.body.id}/payments`,
+    ).send({ amount: '100.00', method: 'CASH', paidAt: '2026-11-10' });
+
+    expect(otherPayment.status).toBe(201);
+    expect(otherPayment.body.payment.receiptNo).toBe('RCPT-000001');
+
+    const teacher = await addMember(owner.client, workspace.id, 'teacher@example.com');
+
+    expect(
+      (
+        await teacher.client.get(
+          `/api/v1/workspaces/${workspace.id}/finance/payments/${paid.body.payment.id}/receipt`,
+        )
+      ).status,
+    ).toBe(403);
+  });
+
+  it('reports monthly collections by class with receipt numbers', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const schoolClass = await createClass(owner.client, workspace.id);
+    const amara = await createStudent(owner.client, workspace.id, 'Amara');
+    const binod = await createStudent(owner.client, workspace.id, 'Binod');
+
+    await enroll(owner.client, workspace.id, schoolClass.id, amara.id);
+    await enroll(owner.client, workspace.id, schoolClass.id, binod.id);
+
+    const plan = await createPlan(owner.client, workspace.id, { classId: schoolClass.id });
+
+    await generate(owner.client, workspace.id, plan.id, '2026-11');
+
+    const fees = await owner.client.get(
+      `/api/v1/workspaces/${workspace.id}/finance/fees?month=2026-11`,
+    );
+    const [first, second] = fees.body.items as { id: string }[];
+
+    await post(owner.client, `/workspaces/${workspace.id}/finance/fees/${first!.id}/payments`)
+      .send({ amount: '2000.00', method: 'CASH', paidAt: '2026-11-10' })
+      .expect(201);
+    await post(owner.client, `/workspaces/${workspace.id}/finance/fees/${second!.id}/payments`)
+      .send({ amount: '3500.00', method: 'BANK', paidAt: '2026-11-10', reference: 'SLIP-55' })
+      .expect(201);
+
+    const report = await owner.client.get(
+      `/api/v1/workspaces/${workspace.id}/finance/reports/monthly?month=2026-11`,
+    );
+
+    expect(report.status).toBe(200);
+    expect(report.body).toMatchObject({
+      month: '2026-11',
+      currency: 'LKR',
+      totals: {
+        billed: '7000.00',
+        collected: '5500.00',
+        outstanding: '1500.00',
+        overdue: 1,
+      },
+    });
+    expect(report.body.classes).toEqual([
+      {
+        id: schoolClass.id,
+        name: 'Grade 8',
+        studentCount: 2,
+        billed: '7000.00',
+        collected: '5500.00',
+        outstanding: '1500.00',
+      },
+    ]);
+    expect(report.body.payments).toHaveLength(2);
+    expect(
+      (report.body.payments as { receiptNo: string }[]).map((payment) => payment.receiptNo).sort(),
+    ).toEqual(['RCPT-000001', 'RCPT-000002']);
+    expect(
+      (
+        report.body.payments as { student: { name: string }; fee: { periodMonth: string | null } }[]
+      )[0],
+    ).toMatchObject({ student: { name: expect.any(String) }, fee: { periodMonth: '2026-11' } });
+
+    const empty = await owner.client.get(
+      `/api/v1/workspaces/${workspace.id}/finance/reports/monthly?month=2026-12`,
+    );
+
+    expect(empty.status).toBe(200);
+    expect(empty.body.totals).toMatchObject({
+      billed: '0.00',
+      collected: '0.00',
+      outstanding: '1500.00',
+    });
+    expect(empty.body.payments).toEqual([]);
+
+    expect(
+      (
+        await owner.client.get(
+          `/api/v1/workspaces/${workspace.id}/finance/reports/monthly?month=2026-13`,
+        )
+      ).status,
+    ).toBe(400);
+
+    const teacher = await addMember(owner.client, workspace.id, 'teacher@example.com');
+
+    expect(
+      (
+        await teacher.client.get(
+          `/api/v1/workspaces/${workspace.id}/finance/reports/monthly?month=2026-11`,
+        )
+      ).status,
+    ).toBe(403);
   });
 
   it('validates fee edits, future payments and voiding', async () => {

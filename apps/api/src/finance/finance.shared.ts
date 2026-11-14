@@ -40,6 +40,12 @@ export function money(value: Prisma.Decimal | string | number): string {
   return new Prisma.Decimal(value).toFixed(2);
 }
 
+export const RECEIPT_COUNTER_KEY = 'payment_receipt';
+
+export function formatReceiptNumber(value: number): string {
+  return `RCPT-${String(value).padStart(6, '0')}`;
+}
+
 export function balance(amount: Prisma.Decimal, paidAmount: Prisma.Decimal): Prisma.Decimal {
   return amount.minus(paidAmount);
 }
@@ -150,6 +156,7 @@ export const studentFeeSelect = {
 export const paymentSelect = {
   id: true,
   studentFeeId: true,
+  receiptNumber: true,
   amount: true,
   method: true,
   paidAt: true,
@@ -160,6 +167,43 @@ export const paymentSelect = {
     select: {
       id: true,
       user: { select: { firstName: true, lastName: true } },
+    },
+  },
+} satisfies Prisma.PaymentSelect;
+
+export const receiptSelect = {
+  id: true,
+  receiptNumber: true,
+  amount: true,
+  method: true,
+  paidAt: true,
+  reference: true,
+  note: true,
+  createdAt: true,
+  recordedBy: {
+    select: {
+      id: true,
+      user: { select: { firstName: true, lastName: true } },
+    },
+  },
+  studentFee: {
+    select: {
+      id: true,
+      description: true,
+      amount: true,
+      paidAmount: true,
+      status: true,
+      periodMonth: true,
+      dueDate: true,
+      student: {
+        select: {
+          id: true,
+          studentCode: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+      class: { select: { id: true, name: true } },
     },
   },
 } satisfies Prisma.PaymentSelect;
@@ -178,6 +222,7 @@ export type StudentFeeDetailRow = Prisma.StudentFeeGetPayload<{
   select: typeof studentFeeDetailSelect;
 }>;
 export type PaymentRow = Prisma.PaymentGetPayload<{ select: typeof paymentSelect }>;
+export type ReceiptRow = Prisma.PaymentGetPayload<{ select: typeof receiptSelect }>;
 
 export function toFeePlanView(row: FeePlanRow) {
   return {
@@ -218,6 +263,7 @@ export function toPaymentView(row: PaymentRow) {
   return {
     id: row.id,
     studentFeeId: row.studentFeeId,
+    receiptNo: formatReceiptNumber(row.receiptNumber),
     amount: money(row.amount),
     method: row.method,
     paidAt: formatCalendarDate(row.paidAt),
@@ -226,6 +272,61 @@ export function toPaymentView(row: PaymentRow) {
     createdAt: row.createdAt,
     recordedBy,
   };
+}
+
+export function toReceiptView(
+  row: ReceiptRow,
+  workspace: { id: string; name: string; currency: string },
+) {
+  const fee = row.studentFee;
+  const studentName = [fee.student.firstName, fee.student.lastName].filter(Boolean).join(' ');
+  const recordedBy = row.recordedBy
+    ? `${row.recordedBy.user.firstName} ${row.recordedBy.user.lastName ?? ''}`.trim()
+    : null;
+
+  return {
+    receiptNo: formatReceiptNumber(row.receiptNumber),
+    amount: money(row.amount),
+    method: row.method,
+    paidAt: formatCalendarDate(row.paidAt),
+    reference: row.reference,
+    note: row.note,
+    recordedAt: row.createdAt,
+    recordedBy,
+    workspace,
+    student: {
+      id: fee.student.id,
+      name: studentName,
+      studentCode: fee.student.studentCode,
+    },
+    class: fee.class,
+    fee: {
+      id: fee.id,
+      description: fee.description,
+      amount: money(fee.amount),
+      paidAmount: money(fee.paidAmount),
+      balance: money(balance(fee.amount, fee.paidAmount)),
+      status: fee.status,
+      periodMonth: fee.periodMonth ? formatMonth(fee.periodMonth) : null,
+      dueDate: formatCalendarDate(fee.dueDate),
+    },
+  };
+}
+
+// Drawn inside the payment transaction so a rolled-back payment also rolls back
+// the increment. Numbers are never reused, even after a payment is deleted.
+export async function allocateReceiptNumber(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+): Promise<number> {
+  const counter = await tx.workspaceCounter.upsert({
+    where: { workspaceId_key: { workspaceId, key: RECEIPT_COUNTER_KEY } },
+    create: { workspaceId, key: RECEIPT_COUNTER_KEY, value: 1 },
+    update: { value: { increment: 1 } },
+    select: { value: true },
+  });
+
+  return counter.value;
 }
 
 // Payments are the ledger; the fee row only caches their total so lists and

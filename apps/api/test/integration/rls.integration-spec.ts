@@ -93,7 +93,7 @@ const paymentB = randomUUID();
 
 async function seed() {
   await query(
-    'TRUNCATE TABLE "payments", "student_fees", "fee_plans", "attendance_records", "attendance_sessions", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
+    'TRUNCATE TABLE "workspace_counters", "payments", "student_fees", "fee_plans", "attendance_records", "attendance_sessions", "class_schedule_slots", "class_subjects", "subjects", "class_teachers", "classes", "teacher_profiles", "student_guardians", "guardians", "students", "workspace_invitations", "memberships", "workspaces", "users" RESTART IDENTITY CASCADE',
   );
 
   const now = new Date().toISOString();
@@ -319,12 +319,18 @@ async function seed() {
 
   await query(
     `INSERT INTO "payments"
-       ("id", "workspace_id", "student_fee_id", "amount", "method", "paid_at",
+       ("id", "workspace_id", "student_fee_id", "receipt_number", "amount", "method", "paid_at",
         "recorded_by_membership_id", "created_at", "updated_at")
      VALUES
-       ($1, $2, $3, 1000.00, 'CASH', '2026-11-10', $5, $7, $7),
-       ($4, $6, $8, 500.00, 'BANK', '2026-11-11', $9, $7, $7)`,
+       ($1, $2, $3, 1, 1000.00, 'CASH', '2026-11-10', $5, $7, $7),
+       ($4, $6, $8, 1, 500.00, 'BANK', '2026-11-11', $9, $7, $7)`,
     [paymentA, workspaceA, feeA, paymentB, membershipA2, workspaceB, now, feeB, membershipB1],
+  );
+
+  await query(
+    `INSERT INTO "workspace_counters" ("workspace_id", "key", "value")
+     VALUES ($1, 'payment_receipt', 1), ($2, 'payment_receipt', 1)`,
+    [workspaceA, workspaceB],
   );
 }
 
@@ -360,6 +366,7 @@ describe('Row level security on tenant tables', () => {
       const plans = await query('SELECT * FROM "fee_plans"');
       const fees = await query('SELECT * FROM "student_fees"');
       const payments = await query('SELECT * FROM "payments"');
+      const counters = await query('SELECT * FROM "workspace_counters"');
 
       expect(memberships.rowCount).toBe(0);
       expect(invitations.rowCount).toBe(0);
@@ -377,6 +384,7 @@ describe('Row level security on tenant tables', () => {
       expect(plans.rowCount).toBe(0);
       expect(fees.rowCount).toBe(0);
       expect(payments.rowCount).toBe(0);
+      expect(counters.rowCount).toBe(0);
     });
   });
 
@@ -402,6 +410,7 @@ describe('Row level security on tenant tables', () => {
       const plans = await query('SELECT "id", "workspace_id" FROM "fee_plans"');
       const fees = await query('SELECT "id", "workspace_id" FROM "student_fees"');
       const payments = await query('SELECT "id", "workspace_id" FROM "payments"');
+      const counters = await query('SELECT "workspace_id" FROM "workspace_counters"');
 
       expect(memberships.rowCount).toBe(2);
       expect(memberships.rows.every((row) => row.workspace_id === workspaceA)).toBe(true);
@@ -420,6 +429,7 @@ describe('Row level security on tenant tables', () => {
       expect(plans.rows.map((row) => row.id)).toEqual([planA]);
       expect(fees.rows.map((row) => row.id)).toEqual([feeA]);
       expect(payments.rows.map((row) => row.id)).toEqual([paymentA]);
+      expect(counters.rows).toEqual([{ workspace_id: workspaceA }]);
     });
   });
 
@@ -616,10 +626,22 @@ describe('Row level security on tenant tables', () => {
       await expect(
         query(
           `INSERT INTO "payments"
-             ("id", "workspace_id", "student_fee_id", "amount", "method", "paid_at",
+             ("id", "workspace_id", "student_fee_id", "receipt_number", "amount", "method", "paid_at",
               "created_at", "updated_at")
-           VALUES ($1, $2, $3, 100.00, 'CASH', CURRENT_DATE, now(), now())`,
+           VALUES ($1, $2, $3, 3, 100.00, 'CASH', CURRENT_DATE, now(), now())`,
           [randomUUID(), workspaceB, feeB],
+        ),
+      ).rejects.toThrow(/row-level security policy/i);
+    });
+
+    await asRestrictedRole(async () => {
+      await setConfig('app.workspace_id', workspaceA);
+
+      await expect(
+        query(
+          `INSERT INTO "workspace_counters" ("workspace_id", "key", "value")
+           VALUES ($1, 'payment_receipt', 5)`,
+          [workspaceB],
         ),
       ).rejects.toThrow(/row-level security policy/i);
     });
@@ -744,6 +766,7 @@ describe('Row level security on tenant tables', () => {
       const plans = await query('SELECT "id" FROM "fee_plans"');
       const fees = await query('SELECT "id" FROM "student_fees"');
       const payments = await query('SELECT "id" FROM "payments"');
+      const counters = await query('SELECT "workspace_id" FROM "workspace_counters"');
 
       expect(memberships.rowCount).toBe(3);
       expect(invitations.rowCount).toBe(2);
@@ -761,6 +784,7 @@ describe('Row level security on tenant tables', () => {
       expect(plans.rowCount).toBe(2);
       expect(fees.rowCount).toBe(2);
       expect(payments.rowCount).toBe(2);
+      expect(counters.rowCount).toBe(2);
     });
   });
 

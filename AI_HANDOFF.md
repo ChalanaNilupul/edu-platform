@@ -26,10 +26,11 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 6 Batch 2 is implemented: read-time class and student attendance summaries over a date range (present + late attended, excused excluded from the rate), range validation capped at 366 days, an Attendance summary card on the class and student detail pages with 7/30/90-day presets, and no schema change.
 - The attendance hub is implemented: a live `GET /workspaces/:workspaceId/attendance/overview?date=` route and a workspace Attendance page that lists active classes with their register status, author and mark counts, with deep links into each class register for the selected day. The sidebar Attendance item now points at the hub; the class-page register is unchanged apart from honouring `?date=` and the `#attendance` anchor.
 - Phase 7 Batch 1 is implemented: manager-only fee plans (monthly, class-scoped or workspace-wide) with monthly generation for actively enrolled students, manual one-off fee records, cash and bank payments that update a cached paid amount/balance in the same transaction, payment deletion, voiding, and a finance page with a month summary plus filterable plan and fee tables.
+- Phase 7 Batch 2 is implemented: sequential per-workspace receipt numbers drawn from a `workspace_counters` row inside the payment transaction, a receipt API and a standalone printable receipt page, and a monthly finance report (per-class billed/collected/outstanding plus the month's receipt ledger) with client-side CSV exports.
 - Runtime verification of rate limiting and Origin/CSRF checking is complete (November 13, 2026): the global 30 req/60s cap and the auth-route 5/min and 3/min limits return 429; unsafe requests with a foreign or missing Origin are rejected with 403; spoofed `X-Forwarded-For` does not reset the limit while `TRUST_PROXY=false`.
-- Verified by 313 unit tests, 142 mocked HTTP E2E tests, 108 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, the subject catalogue and class linking, the weekly timetable (overlap rejection, adjacent slots, edit and remove), the daily attendance register (save, correct, day navigation, read-only teacher view), the attendance summaries (class totals and rates, presets and custom ranges, student view), the attendance hub (saved and unsaved classes, date switching, the deep link into a day's register, invalid/future date fallback), the unverified-email banner plus blocked workspace creation, and the finance flow (create a plan, generate a month, partial cash payment, bank settlement, payment deletion, manual fee, void, archive/reactivate, amount edit and filters).
-- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 weekly availability; attendance reports; finance receipts and reports; the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement), `f72f091` (Phase 4 batch 1) and `9ba01fb` (Phase 4 batch 2) were pushed on `feat/phase-3-student-profiles`. Phase 5 batches 1–2 were pushed in `495b820` and `5eacb0b`, and Phase 6 batch 1 in `5500370` on `feat/phase-6-attendance`. Phase 6 batch 2 and Phase 7 batch 1 were pushed in `018a902` on `feat/phase-7-finance`. The attendance hub exists only in the AI copy until reviewed and committed.
+- Verified by 320 unit tests, 144 mocked HTTP E2E tests, 110 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, the subject catalogue and class linking, the weekly timetable (overlap rejection, adjacent slots, edit and remove), the daily attendance register (save, correct, day navigation, read-only teacher view), the attendance summaries (class totals and rates, presets and custom ranges, student view), the attendance hub (saved and unsaved classes, date switching, the deep link into a day's register, invalid/future date fallback), the unverified-email banner plus blocked workspace creation, the finance flow (create a plan, generate a month, partial cash payment, bank settlement, payment deletion, manual fee, void, archive/reactivate, amount edit and filters), and the finance report and receipt flow (report totals, per-class table, receipt ledger, both CSV downloads, printable receipts, and a new payment receiving the next number with an "Open receipt" link while a deleted number stays unissued).
+- Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 weekly availability; attendance reports; the remaining Low-severity review items.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement), `f72f091` (Phase 4 batch 1) and `9ba01fb` (Phase 4 batch 2) were pushed on `feat/phase-3-student-profiles`. Phase 5 batches 1–2 were pushed in `495b820` and `5eacb0b`, and Phase 6 batch 1 in `5500370` on `feat/phase-6-attendance`. Phase 6 batch 2 and Phase 7 batch 1 were pushed in `018a902` on `feat/phase-7-finance`. The attendance hub and Phase 7 batch 2 exist only in the AI copy until reviewed and committed.
 
 ---
 
@@ -60,11 +61,11 @@ https://github.com/ChalanaNilupul/edu-platform
 
 Current development branch:
 
-`feat/phase-3-student-profiles`
+`feat/phase-7-finance` — Phase 7 batch 2 on top of Phase 7 batch 1 (`018a902`) and the attendance hub commit (`1f820cb`).
 
 Current development phase:
 
-**Phase 6 — Attendance Management (batches 1–2 delivered)**
+**Phase 7 — Finance and Fee Management (batches 1–2 delivered)**
 
 Do not assume that Phase 2 or Phase 3 has been merged into `main`.
 
@@ -649,26 +650,31 @@ Delivered with no schema change; the hub aggregates the existing registers on re
 
 # 9K. Phase 7 — Finance Implementation
 
-Delivered in batch 1 (core fee flow). Every finance route is manager-only (OWNER override/ADMIN/BRANCH_MANAGER) and runs inside the tenant transaction context:
+Delivered in batches 1–2 (core fee flow, receipts and monthly report). Every finance route is manager-only (OWNER override/ADMIN/BRANCH_MANAGER) and runs inside the tenant transaction context:
 
-- API: `apps/api/src/finance/` — `finance.module.ts`, `fee-plans.controller/service`, `student-fees.controller/service`, `payments.service`, `finance-overview.controller/service`, `finance.shared.ts` and DTOs. Routes under `/workspaces/:workspaceId/finance`:
+- API: `apps/api/src/finance/` — `finance.module.ts`, `fee-plans.controller/service`, `student-fees.controller/service`, `payments.controller/service`, `finance-overview.controller/service`, `finance-report.controller/service`, `finance.shared.ts` and DTOs. Routes under `/workspaces/:workspaceId/finance`:
   - `GET /overview?month=YYYY-MM` — billed and collected totals for the month, all-time outstanding, overdue count and all-time status counts.
   - `GET/POST /plans`, `GET/PATCH /plans/:planId`, `POST /plans/:planId/generate` (201).
   - `GET/POST /fees`, `GET/PATCH /fees/:feeId`, `POST /fees/:feeId/payments` (201), `DELETE /fees/:feeId/payments/:paymentId` (204).
+  - `GET /payments/:paymentId/receipt` — receipt payload for the printable page.
+  - `GET /reports/monthly?month=YYYY-MM` — month totals, per-class breakdown and the month's payment ledger.
 - Plans are `MONTHLY` or `ONE_TIME`, target one class or every active class, have a due day 1–28 and are archived rather than deleted (`ACTIVE`/`ARCHIVED`). Generation only works for active monthly plans on active classes: it seeds one fee per actively enrolled active student for the month, skips duplicates through the `(student_id, fee_plan_id, period_month)` unique key and reports `{ totalStudents, created, skipped }`.
 - `student_fees` cache `paid_amount` and a derived `UNPAID/PARTIAL/PAID/VOID` status next to the billed `amount`. Payments (`CASH` or `BANK`, with paid date, optional reference and note) update the cache in the same transaction; deleting a payment restores the balance and status. Voided records reject further payments. Amounts are `Decimal(12,2)` and serialize as fixed two-decimal strings.
-- Audit events `FEE_PLAN_CREATED`, `FEE_PLAN_UPDATED` (including archival), `FEE_PLAN_ARCHIVED`, `STUDENT_FEE_CREATED`, `STUDENT_FEE_UPDATED`, `STUDENT_FEES_GENERATED`, `PAYMENT_RECORDED` and `PAYMENT_DELETED` carry ids, field lists and amounts only.
-- Web: `apps/web/src/lib/finance.ts` (types, labels, colors, money/month helpers), `components/fee-plan-form.tsx`, `fee-plan-actions.tsx` (inline month picker + generate, archive/reactivate), `student-fee-form.tsx`, `record-payment-form.tsx`, `fee-actions.tsx`, `payment-actions.tsx`, plus the finance page (summary cards with a month picker, status chips, plan table, filterable fee table and pagination), plan create/edit pages, manual fee page and fee detail page. `canManageFinance` in `lib/workspace-session.ts` gates the pages, and the `Finance` item in `dashboard-shell.tsx` resolves to the workspace finance route.
-- Migration: `20261114200000_add_finance` (BillingPeriod, FeePlanStatus, FeeStatus and PaymentMethod enums, eight audit values, three tables, unique/indexes, FKs and tenant RLS on `fee_plans`, `student_fees` and `payments`).
-- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh role grants.
+- Receipt numbers are drawn from a per-workspace `payment_receipt` counter row (`workspace_counters`) with a single `upsert` + `{ value: { increment: 1 } }` inside the payment transaction. A rolled-back payment also rolls back the increment; a deleted payment never releases its number. Existing payments were backfilled by `ROW_NUMBER()` ordered by `created_at`, `id`, and each workspace counter starts at the highest number already in use. Numbers render as `RCPT-000001`.
+- The receipt payload carries workspace name/currency, receipt number, amount, method, paid date, reference, note, recorded timestamp and author name, student name/code, class name and the fee's description, period, total, paid-to-date, balance and status. A payment outside the workspace returns 404 and teachers are refused by the guard.
+- The monthly report treats billed as the month's fee records (`period_month`, falling back to the creation month for one-off fees), collected as payments with `paid_at` in the month, outstanding as the current all-time balance, and overdue as past-due fees with a balance (the same query as the overview). Classes are alphabetical with an unassigned "No class" bucket last. An invalid `month` is rejected before any tenant query.
+- Audit events `FEE_PLAN_CREATED`, `FEE_PLAN_UPDATED` (including archival), `FEE_PLAN_ARCHIVED`, `STUDENT_FEE_CREATED`, `STUDENT_FEE_UPDATED`, `STUDENT_FEES_GENERATED`, `PAYMENT_RECORDED` and `PAYMENT_DELETED` carry ids, field lists and amounts only; payment events also carry `receiptNo`.
+- Web: `apps/web/src/lib/finance.ts` (types, labels, colors, money/month helpers), `components/fee-plan-form.tsx`, `fee-plan-actions.tsx` (inline month picker + generate, archive/reactivate), `student-fee-form.tsx`, `record-payment-form.tsx`, `fee-actions.tsx`, `payment-actions.tsx`, plus the finance page (summary cards with a month picker, status chips, plan table, filterable fee table and pagination), plan create/edit pages, manual fee page and fee detail page. The fee detail payment history has a Receipt column and the record-payment success message links to the new receipt. `components/print-receipt-button.tsx` and the standalone receipt page at `/finance/receipts/:paymentId` render a printable document without app chrome. `components/report-export-buttons.tsx` and the report page at `/finance/reports` render the summary cards, per-class table with totals, receipt ledger and two client-side CSV downloads; the finance hub header links to it. `canManageFinance` in `lib/workspace-session.ts` gates the pages, and the `Finance` item in `dashboard-shell.tsx` resolves to the workspace finance route.
+- Migrations: `20261114200000_add_finance` (BillingPeriod, FeePlanStatus, FeeStatus and PaymentMethod enums, eight audit values, three tables, unique/indexes, FKs and tenant RLS on `fee_plans`, `student_fees` and `payments`) and `20261114210000_add_payment_receipts` (`payments.receipt_number` plus its unique index, `workspace_counters` with RLS, the backfill and the counter seed).
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migrations and refresh role grants; `pnpm --filter @edu-platform/api prisma generate` if the client was not regenerated.
 
 # 10. Testing Status
 
-Current verified results after Phase 7 batch 1:
+Current verified results after Phase 7 batch 2:
 
 ## Unit Tests
 
-313 tests passed across 25 files:
+320 tests passed across 26 files:
 
 - Authentication service.
 - Workspace service.
@@ -686,8 +692,9 @@ Current verified results after Phase 7 batch 1:
 - Attendance service (30 tests covering the unmarked roster, merged saved statuses, invalid dates, missing classes, first save and audit metadata, no-op saves, corrections, duplicate students, future dates, non-enrolled students, archived classes, assigned vs unassigned teachers, manager access, leaver history, class summary rate maths with excused excluded, sort order, leaver rows, empty summaries, range rejection, student summary grouping/404, the day overview with saved and unsaved classes, unmarked clamping, empty workspaces, invalid dates and role propagation).
 - Fee plans service (8 tests covering creation with parsed amounts and defaults, unknown classes and duplicate names, list filters/pagination, diffed update auditing, the archive event, generation per active enrollment with duplicate skipping, one-time/archived/archived-class rejection and cross-workspace 404s).
 - Student fees service (7 tests covering status/month/student filters, manual creation, unknown student or class rejection, status recalculation when the amount rises above the paid total, blocking amounts below the paid total and voiding with payments, voiding with audit, and cross-workspace 404s).
-- Payments service (6 tests covering recording with cached totals and audit, overpayment and voided-fee rejection, future-date rejection before any query, locked-fee 404s, deletion with recalculation and audit, and payments that do not belong to the fee).
+- Payments service (10 tests covering recording with cached totals and audit, overpayment and voided-fee rejection, future-date rejection before any query, locked-fee 404s, deletion with recalculation and audit, payments that do not belong to the fee, receipt allocation through the workspace counter, sequence continuation, no allocation for rejected payments, and the receipt lookup with its 404s).
 - Finance overview service (2 tests covering month totals/balances and the LKR fallback when the workspace row is missing).
+- Finance report service (3 tests covering the per-class breakdown, totals and payment view with the unassigned bucket last, the LKR fallback, and month rejection before any tenant query).
 - Enrollments service (19 tests covering capacity, archived classes, history, status transitions, `endedAt` handling, duplicate 409 and role checks).
 - Teachers service (11 tests covering directory eligibility, search/status/pagination, detail 404s, profile creation and update, empty-payload rejection, and manager vs teacher-self authorization).
 - Session guard.
@@ -698,7 +705,7 @@ Current verified results after Phase 7 batch 1:
 
 ## E2E HTTP Tests
 
-142 tests passed across 12 files:
+144 tests passed across 12 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
@@ -710,12 +717,12 @@ Current verified results after Phase 7 batch 1:
 - Subjects E2E (10: unauthenticated refusal, directory query parameters, create with code normalisation, empty name rejection, patch, delete, class subject read/replace, duplicate and malformed ids, student refusal).
 - Class schedule E2E (10: unauthenticated refusal, list, create, invalid payloads, unequal minutes rejection, patch, delete, malformed ids, student refusal).
 - Attendance E2E (19: unauthenticated refusals, register read with date forwarding, missing/malformed/impossible dates and extra query rejection, malformed class id, save payload shaping with trimmed note, invalid payload matrix, teacher access, student refusal, class/student summary forwarding, missing or malformed ranges and extra query rejection, service 400 surfacing, malformed ids, teacher summary access with student refusal, overview date forwarding, overview query validation and overview teacher/student access).
-- Finance E2E (13: unauthenticated refusal, plan list query forwarding, plan creation with numeric amounts coerced to decimal strings, invalid plan payloads, malformed ids and queries, generation with conflicts, fee list/create, invalid fee filters and payloads, update/void, payment recording and validation, payment deletion with an empty body, overview month validation, and branch-manager access with teacher/student refusal).
+- Finance E2E (15: unauthenticated refusal, plan list query forwarding, plan creation with numeric amounts coerced to decimal strings, invalid plan payloads, malformed ids and queries, generation with conflicts, fee list/create, invalid fee filters and payloads, update/void, payment recording and validation, payment deletion with an empty body, overview month validation, receipt reads with 404 and malformed id, monthly report forwarding and month validation, and branch-manager access with teacher/student refusal).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-108 tests passed against a real PostgreSQL 17 database:
+110 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
@@ -727,8 +734,8 @@ Current verified results after Phase 7 batch 1:
 - 10 subject tests: create with audit metadata and class counts, search/filter/pagination, duplicate name/code and invalid payloads, diffed update with archive events, delete guard and `SUBJECT_DELETED`, class subject replacement with audit counts, archived subject/class/unknown-id rules, existing archived links surviving a later archive, teacher read-only with student/outsider refusal, and cross-workspace isolation.
 - 8 class schedule tests: ordered list with audit counts, create variants with audit metadata, class overlap rejection and adjacent slots, teacher double-booking rejection, validation (range, unlinked subject, ineligible teacher), update/delete with cross-class 404s and audit, archived-class blocking with role access, and a direct DB assertion that the exclusion constraint reports `P2039`/`23P01`.
 - 13 attendance tests: recording a register with audit metadata, corrections with only-changed audit rows and leaver history retained, validation (future date, impossible date, duplicates, withdrawn student, unknown id, zero writes), archived-class blocking with history readable, assigned-teacher writes with other-teacher/student/outsider refusal, cross-workspace 404s, class summary counts/rates with excused excluded and narrow/out-of-range windows, inactive leaver rows, student summaries across two classes, range validation, summary role/workspace scoping, and the day overview across active classes (saved vs unsaved, archived excluded, totals, other-day switch, invalid dates, role and workspace scoping).
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles, class-teacher assignments, subjects, class subjects, schedule slots, attendance sessions, attendance records, fee plans, student fees and payments), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
-- 7 finance tests: plan creation with per-workspace unique names, generation once per student/period/plan, payment recording and balance reversal with audit counts, fee edit/future-payment/void validation, overview totals, manager-only access with cross-workspace scoping, and payload/date validation.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles, class-teacher assignments, subjects, class subjects, schedule slots, attendance sessions, attendance records, fee plans, student fees, payments and workspace counters), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
+- 9 finance tests: plan creation with per-workspace unique names, generation once per student/period/plan, payment recording and balance reversal with audit counts and continuing receipt numbers, fee edit/future-payment/void validation, overview totals, manager-only access with cross-workspace scoping, payload/date validation, per-workspace receipt numbering with a printable receipt (cross-workspace 404, new workspace starting at 1, teacher refusal), and the monthly report (totals, class row, ledger, empty month and invalid month validation).
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -1004,10 +1011,11 @@ Still open:
 
 Batch 1 delivered: fee plans (monthly, class-scoped or workspace-wide) with monthly generation for actively enrolled students, manual one-off fee records, cash and bank payments with a cached paid amount/balance/status updated in the same transaction, payment deletion, voiding, and a manager-only finance page with a month summary and a filterable fee table.
 
+Batch 2 delivered: sequential per-workspace receipt numbers that survive deletion, a receipt API and printable receipt page, and a monthly finance report with a per-class breakdown, receipt ledger and CSV exports.
+
 Still open:
 
-- Receipts.
-- Finance reports and exports.
+- Finance exports beyond the two client-side CSVs (for example PDF or date-range reports).
 - Payment edit/correction beyond delete-and-re-record.
 
 ## Phase 8 — Learning
@@ -1066,9 +1074,9 @@ Follow this order:
 1. Finish manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset.
 2. ~~Verify rate limiting and Origin checking at runtime.~~ Done November 13, 2026 — see §11.
 3. ~~Decide whether to extend email-verification enforcement beyond invitation acceptance.~~ Done November 13, 2026 — enforced for workspace creation and invitations; login and workspace switching stay open.
-4. Phase 4 batch 1 and batch 2 are delivered and pushed; Phase 5 batches 1–2 and Phase 6 batch 1 are pushed. Phase 6 batch 2 (attendance summaries) and Phase 7 batch 1 (finance core) are delivered in the AI copy awaiting review/commit. Next: review and commit the AI copy work, then pick between Phase 4 batch 3 weekly availability, Phase 6 attendance reports and the Phase 7 batch 2 finance items (receipts and reports).
+4. Phase 4 batch 1 and batch 2 are delivered and pushed; Phase 5 batches 1–2, Phase 6 batch 1 and Phase 7 batch 1 are pushed. The attendance hub and Phase 7 batch 2 (receipts and the monthly finance report, both verified) are implemented in the AI copy awaiting review/commit. Next: review and commit the AI copy work, then pick between Phase 4 batch 3 weekly availability, Phase 6 attendance reports and the remaining Phase 7 polish.
 
-The Phase 2 runtime security checks, the M1 scope decision and Phase 4 batches 1–2 are closed. Phase 5 batches 1–2 and Phase 6 batch 1 are pushed; Phase 6 batch 2 and Phase 7 batch 1 are implemented in the AI copy pending review. Remaining before further batches is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred guardian reuse polish.
+The Phase 2 runtime security checks, the M1 scope decision and Phase 4 batches 1–2 are closed. Phase 5 batches 1–2, Phase 6 batch 1 and Phase 7 batch 1 are pushed; the attendance hub and Phase 7 batch 2 are implemented in the AI copy pending review. Remaining before further batches is browser confirmation of the invitation, role-change and password-reset flows, plus the deferred guardian reuse polish.
 
 # 17. Development Rules for AI Assistance
 

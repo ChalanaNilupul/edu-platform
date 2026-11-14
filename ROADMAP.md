@@ -4,7 +4,7 @@ Last updated: November 14, 2026
 
 ## Project Status
 
-**Current Phase: Phase 7 — Finance and Fee Management (batch 1 delivered)**
+**Current Phase: Phase 7 — Finance and Fee Management (batches 1–2 delivered)**
 
 EduPlatform is a modular, multi-tenant SaaS platform combining Learning Management System (LMS) and Institute Management System (IMS) capabilities.
 
@@ -469,7 +469,7 @@ Verified: 313 unit tests, 142 mocked HTTP E2E tests, 108 real-database integrati
 
 # Phase 7 — Finance and Fee Management
 
-**Status: In progress — batch 1 (fee plans, student fee records, monthly generation, payments) delivered**
+**Status: In progress — batch 2 (payment receipts, printable receipt, monthly report) delivered**
 
 ### Fee plans and student fee notes (November 14, 2026)
 
@@ -487,6 +487,19 @@ Finance is manager-only: every route requires OWNER/ADMIN/BRANCH_MANAGER. Amount
 
 Verified: 307 unit tests, 138 mocked HTTP E2E tests, 106 real-database integration tests (including RLS on `fee_plans`, `student_fees` and `payments`), typecheck, lint, format, API build, `next build` and a browser walkthrough (create a class plan, generate a month, record a partial cash payment, settle by bank transfer, delete a payment, create and void a manual fee, archive/reactivate the plan and edit its amount).
 
+### Receipts and monthly finance report (November 14, 2026)
+
+Migration `20261114210000_add_payment_receipts` adds `payments.receipt_number` (unique per workspace) and a `workspace_counters` table with tenant RLS.
+
+- Receipt numbers are drawn from a per-workspace `payment_receipt` counter inside the payment transaction (`workspaceCounter.upsert` → `INSERT … ON CONFLICT DO UPDATE`). A rolled-back payment rolls the increment back, and a deleted payment never releases its number. Existing payments were backfilled with `ROW_NUMBER()` ordered by `created_at`, `id`; workspaces that already had payments start their counter at the highest number in use.
+- Receipts render as `RCPT-000001` (`RCPT-%06d`). `PAYMENT_RECORDED` / `PAYMENT_DELETED` audit metadata now includes `receiptNo` alongside the ids and amounts.
+- `GET /finance/payments/:paymentId/receipt` returns the receipt payload: workspace name and currency, receipt number, amount, method, paid date, reference, note, recorded timestamp and author membership name, student name/code, class name and the fee's description, period, total, paid-to-date, balance and status. Missing fee/workspace → 404; teachers → 403.
+- `GET /finance/reports/monthly?month=YYYY-MM` (default: current month) returns billed and collected for the month, all-time outstanding, overdue count, a per-class breakdown and the month's payment ledger. Billed = fee records for the month (`period_month`, falling back to creation month for one-off fees), collected = payments with `paid_at` in the month, outstanding = current all-time balance per class, overdue = past due with a balance. Classes are alphabetical with an unassigned "No class" bucket last.
+- Web UI: the fee detail payment history gains a Receipt column; the record-payment success message links to the new receipt. A standalone printable receipt page (`/finance/receipts/:paymentId`) renders the workspace document without app chrome, with a client-side print button. A monthly report page (`/finance/reports`) shows four summary cards, a per-class table with totals, the receipt ledger and client-side CSV exports for both tables. The finance hub header links to the report.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration (and `pnpm --filter @edu-platform/api prisma generate` if the client was not regenerated).
+
+Verified: 320 unit tests, 144 mocked HTTP E2E tests, 110 real-database integration tests (including RLS on `workspace_counters`), typecheck, lint, API build, `next build` and a browser walkthrough (finance hub link, report totals/class table/receipt ledger, both CSV downloads, printable receipt for an existing payment, a new payment receiving the next receipt number with an "Open receipt" link, and deletion leaving the number unissued).
+
 - [x] Implement fee structures.
 - [x] Implement student fee records.
 - [x] Implement monthly fee management.
@@ -494,8 +507,8 @@ Verified: 307 unit tests, 138 mocked HTTP E2E tests, 106 real-database integrati
 - [x] Implement bank payment recording.
 - [x] Implement payment history.
 - [x] Implement outstanding balance calculations.
-- [ ] Implement receipts.
-- [ ] Implement finance reports.
+- [x] Implement receipts.
+- [x] Implement finance reports.
 
 # Phase 8 — Learning Management
 

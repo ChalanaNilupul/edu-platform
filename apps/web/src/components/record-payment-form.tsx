@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertCircle, CheckCircle2, Loader2, Plus } from 'lucide-react';
 
@@ -11,6 +12,7 @@ import {
   paymentMethodLabels,
   todayValue,
   type PaymentMethod,
+  type PaymentRecord,
   type StudentFeeDetail,
 } from '@/lib/finance';
 
@@ -43,15 +45,17 @@ export function RecordPaymentForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [receiptHref, setReceiptHref] = useState('');
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError('');
     setSuccess('');
+    setReceiptHref('');
 
     try {
-      const outcome = await apiFetch<{ fee: StudentFeeDetail }>(
+      const outcome = await apiFetch<{ payment: PaymentRecord; fee: StudentFeeDetail }>(
         `/workspaces/${workspaceId}/finance/fees/${feeId}/payments`,
         {
           method: 'POST',
@@ -70,6 +74,7 @@ export function RecordPaymentForm({
           ? 'Payment recorded. This fee is now fully paid.'
           : `Payment recorded. Remaining balance: ${outcome.fee.balance}.`,
       );
+      setReceiptHref(`/workspaces/${workspaceId}/finance/receipts/${outcome.payment.id}`);
       setAmount(outcome.fee.balance);
       setReference('');
       setNote('');
@@ -101,7 +106,17 @@ export function RecordPaymentForm({
       {success ? (
         <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
           <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
-          <span>{success}</span>
+          <span>
+            {success}
+            {receiptHref ? (
+              <Link
+                href={receiptHref}
+                className="ml-1 font-semibold underline underline-offset-2 transition hover:text-emerald-900"
+              >
+                Open receipt
+              </Link>
+            ) : null}
+          </span>
         </div>
       ) : null}
 

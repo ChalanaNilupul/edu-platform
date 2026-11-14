@@ -94,6 +94,7 @@ export type StudentFeeRecord = {
 export type PaymentRecord = {
   id: string;
   studentFeeId: string;
+  receiptNo: string;
   amount: string;
   method: PaymentMethod;
   paidAt: string;
@@ -104,6 +105,30 @@ export type PaymentRecord = {
 };
 
 export type StudentFeeDetail = StudentFeeRecord & { payments: PaymentRecord[] };
+
+export type ReceiptDetail = {
+  receiptNo: string;
+  amount: string;
+  method: PaymentMethod;
+  paidAt: string;
+  reference: string | null;
+  note: string | null;
+  recordedAt: string;
+  recordedBy: string | null;
+  workspace: { id: string; name: string; currency: string };
+  student: { id: string; name: string; studentCode: string | null };
+  class: { id: string; name: string } | null;
+  fee: {
+    id: string;
+    description: string;
+    amount: string;
+    paidAmount: string;
+    balance: string;
+    status: FeeStatus;
+    periodMonth: string | null;
+    dueDate: string;
+  };
+};
 
 export type PaginatedResponse<T> = {
   items: T[];
@@ -121,6 +146,35 @@ export type FinanceOverview = {
   outstanding: string;
   overdue: number;
   counts: { unpaid: number; partial: number; paid: number; void: number };
+};
+
+export type FinanceReportClass = {
+  id: string | null;
+  name: string;
+  studentCount: number;
+  billed: string;
+  collected: string;
+  outstanding: string;
+};
+
+export type FinanceReportPayment = {
+  id: string;
+  receiptNo: string;
+  amount: string;
+  method: PaymentMethod;
+  paidAt: string;
+  reference: string | null;
+  student: { id: string; name: string; studentCode: string | null };
+  fee: { id: string; description: string; periodMonth: string | null };
+  class: { id: string; name: string } | null;
+};
+
+export type FinanceReport = {
+  month: string;
+  currency: string;
+  totals: { billed: string; collected: string; outstanding: string; overdue: number };
+  classes: FinanceReportClass[];
+  payments: FinanceReportPayment[];
 };
 
 export type FeeGenerationResult = {

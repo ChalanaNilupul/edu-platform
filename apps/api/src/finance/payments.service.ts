@@ -14,13 +14,16 @@ import { WorkspaceAccessService } from '../workspaces/workspace-access.service.j
 import type { CreatePaymentDto } from './dto/create-payment.dto.js';
 import {
   MANAGE_ROLES,
+  allocateReceiptNumber,
   money,
   parseAmount,
   parseCalendarDate,
   paymentSelect,
+  receiptSelect,
   recalculateFeeTotals,
   studentFeeDetailSelect,
   toPaymentView,
+  toReceiptView,
   toStudentFeeDetailView,
   utcToday,
 } from './finance.shared.js';
@@ -66,10 +69,13 @@ export class PaymentsService {
         );
       }
 
+      const receiptNumber = await allocateReceiptNumber(tx, workspaceId);
+
       const payment = await tx.payment.create({
         data: {
           workspaceId,
           studentFeeId: feeId,
+          receiptNumber,
           amount,
           method: dto.method,
           paidAt,
@@ -101,12 +107,40 @@ export class PaymentsService {
       targetId: feeId,
       metadata: {
         paymentId: outcome.payment.id,
+        receiptNo: outcome.payment.receiptNo,
         amount: outcome.payment.amount,
         method: outcome.payment.method,
       },
     });
 
     return outcome;
+  }
+
+  async getReceipt(actorId: string, workspaceId: string, paymentId: string) {
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+      await this.workspaceAccess.requireRoles(actorId, workspaceId, MANAGE_ROLES, tx);
+
+      const [workspace, payment] = await Promise.all([
+        tx.workspace.findUnique({
+          where: { id: workspaceId },
+          select: { id: true, name: true, currency: true },
+        }),
+        tx.payment.findFirst({
+          where: { id: paymentId, workspaceId },
+          select: receiptSelect,
+        }),
+      ]);
+
+      if (!workspace) {
+        throw new NotFoundException('Workspace not found');
+      }
+
+      if (!payment) {
+        throw new NotFoundException('Receipt not found');
+      }
+
+      return toReceiptView(payment, workspace);
+    });
   }
 
   async remove(actorId: string, workspaceId: string, feeId: string, paymentId: string) {
@@ -145,6 +179,7 @@ export class PaymentsService {
       targetId: feeId,
       metadata: {
         paymentId: outcome.payment.id,
+        receiptNo: outcome.payment.receiptNo,
         amount: outcome.payment.amount,
         method: outcome.payment.method,
       },

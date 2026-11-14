@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  NotFoundException,
   UnauthorizedException,
   ValidationPipe,
 } from '@nestjs/common';
@@ -16,6 +17,9 @@ import { FeePlansController } from '../src/finance/fee-plans.controller.js';
 import { FeePlansService } from '../src/finance/fee-plans.service.js';
 import { FinanceOverviewController } from '../src/finance/finance-overview.controller.js';
 import { FinanceOverviewService } from '../src/finance/finance-overview.service.js';
+import { FinanceReportController } from '../src/finance/finance-report.controller.js';
+import { FinanceReportService } from '../src/finance/finance-report.service.js';
+import { PaymentsController } from '../src/finance/payments.controller.js';
 import { PaymentsService } from '../src/finance/payments.service.js';
 import { StudentFeesController } from '../src/finance/student-fees.controller.js';
 import { StudentFeesService } from '../src/finance/student-fees.service.js';
@@ -77,6 +81,7 @@ const FEE = {
 const PAYMENT = {
   id: PAYMENT_ID,
   studentFeeId: FEE_ID,
+  receiptNo: 'RCPT-000001',
   amount: '2000.00',
   method: 'CASH',
   paidAt: '2026-11-10',
@@ -84,6 +89,38 @@ const PAYMENT = {
   note: null,
   createdAt: '2026-11-10T09:00:00.000Z',
   recordedBy: null,
+};
+
+const RECEIPT = {
+  receiptNo: 'RCPT-000001',
+  amount: '2000.00',
+  method: 'CASH',
+  paidAt: '2026-11-10',
+  reference: null,
+  note: null,
+  recordedAt: '2026-11-10T09:00:00.000Z',
+  recordedBy: 'Test User',
+  workspace: { id: WORKSPACE_ID, name: 'Institute', currency: 'LKR' },
+  student: { id: STUDENT_ID, name: 'Amara Silva', studentCode: 'S-001' },
+  class: null,
+  fee: {
+    id: FEE_ID,
+    description: 'Admission fee',
+    amount: '5000.00',
+    paidAmount: '2000.00',
+    balance: '3000.00',
+    status: 'PARTIAL',
+    periodMonth: null,
+    dueDate: '2026-11-30',
+  },
+};
+
+const REPORT = {
+  month: '2026-11',
+  currency: 'LKR',
+  totals: { billed: '0.00', collected: '0.00', outstanding: '0.00', overdue: 0 },
+  classes: [],
+  payments: [],
 };
 
 const OVERVIEW = {
@@ -148,9 +185,14 @@ describe('Finance API (e2e)', () => {
   const paymentsService = {
     record: vi.fn(),
     remove: vi.fn(),
+    getReceipt: vi.fn(),
   };
 
   const overviewService = {
+    get: vi.fn(),
+  };
+
+  const reportService = {
     get: vi.fn(),
   };
 
@@ -185,12 +227,20 @@ describe('Finance API (e2e)', () => {
     studentFeesService.update.mockResolvedValue(FEE);
     paymentsService.record.mockResolvedValue({ payment: PAYMENT, fee: FEE });
     paymentsService.remove.mockResolvedValue(undefined);
+    paymentsService.getReceipt.mockResolvedValue(RECEIPT);
     overviewService.get.mockResolvedValue(OVERVIEW);
+    reportService.get.mockResolvedValue(REPORT);
   });
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [FeePlansController, StudentFeesController, FinanceOverviewController],
+      controllers: [
+        FeePlansController,
+        StudentFeesController,
+        FinanceOverviewController,
+        FinanceReportController,
+        PaymentsController,
+      ],
       providers: [
         SessionAuthGuard,
         WorkspaceRolesGuard,
@@ -199,6 +249,7 @@ describe('Finance API (e2e)', () => {
         { provide: StudentFeesService, useValue: studentFeesService },
         { provide: PaymentsService, useValue: paymentsService },
         { provide: FinanceOverviewService, useValue: overviewService },
+        { provide: FinanceReportService, useValue: reportService },
         { provide: WorkspaceAccessService, useValue: workspaceAccessService },
       ],
     }).compile();
@@ -229,7 +280,13 @@ describe('Finance API (e2e)', () => {
   const cookie = 'edu_session=valid-session';
 
   it('rejects unauthenticated requests', async () => {
-    for (const path of [`${base}/plans`, `${base}/fees`, `${base}/overview?month=2026-11`]) {
+    for (const path of [
+      `${base}/plans`,
+      `${base}/fees`,
+      `${base}/overview?month=2026-11`,
+      `${base}/reports/monthly?month=2026-11`,
+      `${base}/payments/${PAYMENT_ID}/receipt`,
+    ]) {
       const response = await agent().get(path);
 
       expect(response.status).toBe(401);
@@ -489,6 +546,51 @@ describe('Finance API (e2e)', () => {
     const invalid = await agent().get(`${base}/overview?month=2026-13`).set('Cookie', cookie);
 
     expect(invalid.status).toBe(400);
+  });
+
+  it('returns a printable receipt for a payment', async () => {
+    const response = await agent()
+      .get(`${base}/payments/${PAYMENT_ID}/receipt`)
+      .set('Cookie', cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(RECEIPT);
+    expect(paymentsService.getReceipt).toHaveBeenCalledWith(user.id, WORKSPACE_ID, PAYMENT_ID);
+
+    paymentsService.getReceipt.mockRejectedValueOnce(new NotFoundException('Receipt not found'));
+
+    const missing = await agent()
+      .get(`${base}/payments/${PAYMENT_ID}/receipt`)
+      .set('Cookie', cookie);
+
+    expect(missing.status).toBe(404);
+
+    const malformed = await agent()
+      .get(`${base}/payments/not-a-uuid/receipt`)
+      .set('Cookie', cookie);
+
+    expect(malformed.status).toBe(400);
+  });
+
+  it('returns the monthly finance report and validates its month', async () => {
+    const response = await agent()
+      .get(`${base}/reports/monthly?month=2026-11`)
+      .set('Cookie', cookie);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(REPORT);
+    expect(reportService.get).toHaveBeenCalledWith(user.id, WORKSPACE_ID, { month: '2026-11' });
+
+    for (const path of [
+      `${base}/reports/monthly?month=2026-13`,
+      `${base}/reports/monthly?extra=1`,
+    ]) {
+      const invalid = await agent().get(path).set('Cookie', cookie);
+
+      expect(invalid.status).toBe(400);
+    }
+
+    expect(reportService.get).toHaveBeenCalledTimes(1);
   });
 
   it('lets branch managers reach finance but blocks teachers and students', async () => {

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import {
   AlertCircle,
   ArrowLeft,
+  BarChart3,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -242,6 +243,14 @@ export default async function FinancePage({ params, searchParams }: FinancePageP
           Fee plans, student balances and payments for {currentWorkspace.name}. All amounts in{' '}
           {currency}.
         </p>
+
+        <Link
+          href={`/workspaces/${currentWorkspace.id}/finance/reports`}
+          className="mt-4 inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+        >
+          <BarChart3 size={16} />
+          Monthly report
+        </Link>
       </div>
 
       <section className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">

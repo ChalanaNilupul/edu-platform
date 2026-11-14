@@ -186,10 +186,11 @@ export default async function FeeDetailPage({ params }: FeeDetailPageProps) {
             </div>
           ) : (
             <div className="mt-5 overflow-x-auto">
-              <table className="w-full min-w-[560px] text-left text-sm">
+              <table className="w-full min-w-[640px] text-left text-sm">
                 <thead>
                   <tr className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                     <th className="px-3 py-3">Paid on</th>
+                    <th className="px-3 py-3">Receipt</th>
                     <th className="px-3 py-3">Amount</th>
                     <th className="px-3 py-3">Method</th>
                     <th className="px-3 py-3">Reference</th>
@@ -202,6 +203,14 @@ export default async function FeeDetailPage({ params }: FeeDetailPageProps) {
                   {fee.payments.map((payment) => (
                     <tr key={payment.id} className="border-t border-slate-100">
                       <td className="px-3 py-3 text-slate-700">{payment.paidAt}</td>
+                      <td className="px-3 py-3">
+                        <Link
+                          href={`/workspaces/${workspace.id}/finance/receipts/${payment.id}`}
+                          className="font-semibold text-blue-600 transition hover:text-blue-700"
+                        >
+                          {payment.receiptNo}
+                        </Link>
+                      </td>
                       <td className="px-3 py-3 font-semibold text-slate-900">
                         {formatMoney(payment.amount, currency)}
                       </td>

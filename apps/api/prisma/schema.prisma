@@ -207,6 +207,7 @@ model Workspace {
   feePlans           FeePlan[]
   studentFees        StudentFee[]
   payments           Payment[]
+  counters           WorkspaceCounter[]
   activeSessions     Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -531,6 +532,7 @@ model Payment {
   id                     String        @id @default(uuid())
   workspaceId            String        @map("workspace_id")
   studentFeeId           String        @map("student_fee_id")
+  receiptNumber          Int           @map("receipt_number")
   amount                 Decimal       @db.Decimal(12, 2)
   method                 PaymentMethod
   paidAt                 DateTime      @map("paid_at") @db.Date
@@ -544,9 +546,23 @@ model Payment {
   studentFee StudentFee  @relation(fields: [studentFeeId], references: [id], onDelete: Cascade)
   recordedBy Membership? @relation("PaymentRecordedBy", fields: [recordedByMembershipId], references: [id], onDelete: SetNull)
 
+  @@unique([workspaceId, receiptNumber])
   @@index([workspaceId, studentFeeId])
   @@index([workspaceId, paidAt])
   @@map("payments")
+}
+
+/// Monotonic counters scoped to a workspace. Receipt numbers are drawn from the
+/// payment_receipt counter so a deleted payment never releases its number.
+model WorkspaceCounter {
+  workspaceId String @map("workspace_id")
+  key         String
+  value       Int
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, key])
+  @@map("workspace_counters")
 }
 
 model Membership {
