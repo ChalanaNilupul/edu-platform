@@ -69,6 +69,16 @@ enum SubjectStatus {
   ARCHIVED
 }
 
+enum DayOfWeek {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
 enum AuditEventType {
   USER_REGISTERED
   LOGIN_SUCCEEDED
@@ -107,6 +117,9 @@ enum AuditEventType {
   SUBJECT_ARCHIVED
   SUBJECT_DELETED
   CLASS_SUBJECTS_CHANGED
+  CLASS_SCHEDULE_SLOT_CREATED
+  CLASS_SCHEDULE_SLOT_UPDATED
+  CLASS_SCHEDULE_SLOT_DELETED
 }
 
 model User {
@@ -147,6 +160,7 @@ model Workspace {
   classTeachers    ClassTeacher[]
   subjects         Subject[]
   classSubjects    ClassSubject[]
+  scheduleSlots    ClassScheduleSlot[]
   activeSessions   Session[]             @relation("SessionActiveWorkspace")
 
   @@map("workspaces")
@@ -242,6 +256,7 @@ model Class {
   enrollments Enrollment[]
   teachers    ClassTeacher[]
   subjects    ClassSubject[]
+  schedule    ClassScheduleSlot[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId, status])
@@ -305,8 +320,9 @@ model Subject {
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  workspace  Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace  Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   classLinks ClassSubject[]
+  schedule   ClassScheduleSlot[]
 
   @@unique([workspaceId, name])
   @@unique([workspaceId, code])
@@ -331,6 +347,32 @@ model ClassSubject {
   @@map("class_subjects")
 }
 
+/// Recurring weekly timetable slot. Times are minutes from midnight; the
+/// migration enforces non-overlap per class and per teacher with exclusion
+/// constraints.
+model ClassScheduleSlot {
+  id           String    @id @default(uuid())
+  workspaceId  String    @map("workspace_id")
+  classId      String    @map("class_id")
+  subjectId    String    @map("subject_id")
+  membershipId String?   @map("membership_id")
+  dayOfWeek    DayOfWeek @map("day_of_week")
+  startMinutes Int       @map("start_minutes")
+  endMinutes   Int       @map("end_minutes")
+  room         String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  workspace  Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  class      Class      @relation(fields: [classId], references: [id], onDelete: Cascade)
+  subject    Subject    @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  membership Membership? @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, classId, dayOfWeek, startMinutes], map: "class_schedule_slots_class_time_idx")
+  @@index([workspaceId, membershipId, dayOfWeek, startMinutes], map: "class_schedule_slots_teacher_time_idx")
+  @@map("class_schedule_slots")
+}
+
 model Membership {
   id          String           @id @default(uuid())
   userId      String           @map("user_id")
@@ -345,6 +387,7 @@ model Membership {
 
   teacherProfile TeacherProfile?
   classAssignments ClassTeacher[]
+  scheduleSlots     ClassScheduleSlot[]
 
   @@unique([userId, workspaceId])
   @@index([workspaceId])

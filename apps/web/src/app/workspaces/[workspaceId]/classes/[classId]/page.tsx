@@ -15,6 +15,7 @@ import {
 import { AssignTeacherForm } from '@/components/assign-teacher-form';
 import { ClassActions } from '@/components/class-actions';
 import { ClassSubjectForm } from '@/components/class-subject-form';
+import { ClassScheduleManager } from '@/components/class-schedule-manager';
 import { ClassTeacherActions } from '@/components/class-teacher-actions';
 import { DashboardShell } from '@/components/dashboard-shell';
 import { EnrollStudentForm } from '@/components/enroll-student-form';
@@ -33,6 +34,7 @@ import {
   type EnrollmentStatus,
 } from '@/lib/classes';
 import { formatDate } from '@/lib/format-date';
+import type { ClassScheduleListResponse } from '@/lib/schedule';
 import { studentFullName } from '@/lib/student';
 import {
   subjectStatusClasses,
@@ -153,6 +155,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     teacherDirectoryResponse,
     classSubjectsResponse,
     subjectDirectoryResponse,
+    scheduleResponse,
   ] = await Promise.all([
     fetch(
       `${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/enrollments?${rosterParams.toString()}`,
@@ -186,6 +189,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
           { headers, cache: 'no-store' },
         )
       : null,
+    fetch(`${apiUrl}/workspaces/${currentWorkspace.id}/classes/${schoolClass.id}/schedule`, {
+      headers,
+      cache: 'no-store',
+    }),
   ]);
 
   if (!rosterResponse.ok) {
@@ -200,6 +207,10 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
     throw new Error('Unable to load the class subjects.');
   }
 
+  if (!scheduleResponse.ok) {
+    throw new Error('Unable to load the class timetable.');
+  }
+
   const roster = (await rosterResponse.json()) as EnrollmentListResponse;
   const enrolledStudentIds =
     activeResponse && activeResponse.ok
@@ -211,6 +222,7 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
       ? ((await teacherDirectoryResponse.json()) as TeacherListResponse).items
       : [];
   const classSubjects = (await classSubjectsResponse.json()) as ClassSubjectListResponse;
+  const schedule = (await scheduleResponse.json()) as ClassScheduleListResponse;
   const subjectCatalogue =
     subjectDirectoryResponse && subjectDirectoryResponse.ok
       ? ((await subjectDirectoryResponse.json()) as SubjectListResponse).items
@@ -531,6 +543,35 @@ export default async function ClassDetailPage({ params, searchParams }: ClassDet
             </p>
           )
         ) : null}
+      </section>
+
+      <section className="mb-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">Weekly timetable</h2>
+            <p className="mt-1 text-sm text-slate-500">Recurring periods for this class.</p>
+          </div>
+          <span className="inline-flex w-fit rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
+            {schedule.items.length} slots
+          </span>
+        </div>
+
+        {canManage && schoolClass.status !== 'ACTIVE' ? (
+          <p className="mt-4 text-sm text-slate-500">
+            This class is archived. Reactivate it to change the timetable.
+          </p>
+        ) : null}
+
+        <div className="mt-4">
+          <ClassScheduleManager
+            workspaceId={currentWorkspace.id}
+            classId={schoolClass.id}
+            canManage={canManage && schoolClass.status === 'ACTIVE'}
+            slots={schedule.items}
+            subjects={classSubjects.items}
+            teachers={teacherDirectory}
+          />
+        </div>
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">

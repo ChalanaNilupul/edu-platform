@@ -375,7 +375,7 @@ Verified: 212 unit tests, 90 mocked HTTP E2E tests, 70 real-database integration
 
 # Phase 5 — Classes and Batches
 
-**Status: In progress — class records, capacity and enrollment were delivered with Phase 3 batch 4, and batch 1 (subject catalogue and class links) is delivered**
+**Status: In progress — class records, capacity and enrollment were delivered with Phase 3 batch 4; batch 1 (subject catalogue and class links) and batch 2 (weekly timetable) are delivered**
 
 ### Subject catalogue notes (November 14, 2026)
 
@@ -391,13 +391,28 @@ Subjects are a workspace-level catalogue; classes link to subjects rather than o
 
 Verified: 237 unit tests, 100 mocked HTTP E2E tests, 80 real-database integration tests (including RLS on `subjects` and `class_subjects`), typecheck, lint, format, API build, `next build` and a browser walkthrough of subject creation (trim/uppercase), search, archiving, class linking, count updates and the read-only teacher view.
 
+### Weekly timetable notes (November 14, 2026)
+
+The timetable stores recurring weekly periods (day plus start/end minutes) rather than dated lessons, and overlap rules are enforced twice: a friendly service check and a PostgreSQL exclusion constraint as the race backstop.
+
+- `class_schedule_slots` table (migration `20261114170000_add_class_schedule_slots`) with `class_id`, `subject_id`, optional `membership_id` (teacher), `day_of_week` enum (`MONDAY`–`SUNDAY`), `start_minutes`/`end_minutes`, optional `room`, cascade foreign keys and tenant RLS. A table check keeps `0 <= start < end <= 1440`.
+- `btree_gist` extension plus two exclusion constraints over `int4range(start_minutes, end_minutes, '[)')`: `class_schedule_slots_no_class_overlap` blocks overlapping slots in one class, and the partial `class_schedule_slots_no_teacher_overlap` blocks one teacher being scheduled twice at the same time. Half-open ranges let adjacent periods (09:00–10:00 then 10:00–11:00) coexist.
+- Routes under `/workspaces/:workspaceId`: `GET`/`POST /classes/:classId/schedule` and `PATCH`/`DELETE /classes/:classId/schedule/:slotId`. Reads allow OWNER/ADMIN/BRANCH_MANAGER/TEACHER; writes are manager-only.
+- The API accepts any minute (0–1439/1440) while the web form steps in 15-minute increments. Archived classes reject writes with 409; subjects must be linked to the class and active; the optional teacher must be a directory-eligible membership.
+- Overlaps surface as 409 with a class-specific or teacher-specific message. Prisma reports the database exclusion violation as `P2039` (`23P01`), which the service maps to the same friendly conflict response.
+- Audit events `CLASS_SCHEDULE_SLOT_CREATED`, `CLASS_SCHEDULE_SLOT_UPDATED` and `CLASS_SCHEDULE_SLOT_DELETED` store ids, day and minute range — no free text beyond the room is recorded.
+- Web UI: a Weekly timetable card on the class detail page with an add/edit form (day, start/end time, subject, optional teacher, optional room), slots grouped by day with time badges, and manager-only edit/remove actions. Staff without management rights see the timetable read-only.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration, install `btree_gist` and refresh the role grants.
+
+Verified: 260 unit tests, 110 mocked HTTP E2E tests, 88 real-database integration tests (including RLS on `class_schedule_slots` and a direct DB assertion of the exclusion backstop), typecheck, lint, format, API build, `next build` and a browser walkthrough (link a subject, add slots, reject an overlap, accept an adjacent slot, edit and remove a slot).
+
 - [ ] Implement class and batch creation.
 - [x] Implement subject management.
 - [x] Assign teachers to classes.
 - [x] Enroll students into classes.
 - [x] Implement class capacity.
-- [ ] Implement timetable management.
-- [ ] Implement class schedules.
+- [x] Implement timetable management.
+- [x] Implement class schedules.
 - [ ] Implement class history.
 
 # Phase 6 — Attendance Management

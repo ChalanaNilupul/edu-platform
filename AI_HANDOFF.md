@@ -21,10 +21,11 @@ It records the actual project direction, technical architecture, implementation 
 - Phase 4 Batch 1 is implemented: workspace-scoped teacher profiles attached to memberships (RLS included), a teachers directory/detail/profile API, audit events, and a role-aware web directory with add/edit profile pages.
 - Phase 4 Batch 2 is implemented: append-only class-teacher assignments with one active primary teacher per class, partial unique indexes, tenant RLS, manager-only assignment changes, audit events, and a Teachers card on the class page plus an Assigned classes card on the teacher page.
 - Phase 5 Batch 1 is implemented: a workspace-level subject catalogue with optional unique codes, a `class_subjects` link table, tenant RLS on both, manager-only CRUD and class-link routes, audit events, a subjects directory with create/edit pages, and a subject picker on the class detail page.
+- Phase 5 Batch 2 is implemented: recurring weekly timetable slots per class with an optional teacher and room, `btree_gist` exclusion constraints for class and teacher overlap, manager-only writes, audit events, and a Weekly timetable card with an add/edit form on the class detail page.
 - Runtime verification of rate limiting and Origin/CSRF checking is complete (November 13, 2026): the global 30 req/60s cap and the auth-route 5/min and 3/min limits return 429; unsafe requests with a foreign or missing Origin are rejected with 403; spoofed `X-Forwarded-For` does not reset the limit while `TRUST_PROXY=false`.
-- Verified by 237 unit tests, 100 mocked HTTP E2E tests, 80 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, the subject catalogue and class linking, and the unverified-email banner plus blocked workspace creation.
+- Verified by 260 unit tests, 110 mocked HTTP E2E tests, 88 real-database integration tests, typecheck, lint, format, API build, `next build` and browser walkthroughs of the student directory, guardian links, CSV import, classes/enrollment, teacher profiles, class-teacher assignments, the subject catalogue and class linking, the weekly timetable (overlap rejection, adjacent slots, edit and remove) and the unverified-email banner plus blocked workspace creation.
 - Still open: manual browser confirmation of invitation creation/acceptance, role changes, workspace switching and password reset; guardian reuse across students; Phase 4 weekly availability; the remaining Low-severity review items.
-- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement), `f72f091` (Phase 4 batch 1) and `9ba01fb` (Phase 4 batch 2) were pushed on `feat/phase-3-student-profiles`. Phase 5 batch 1 exists only in the AI copy until reviewed and committed.
+- Commits `cfcaa1f` (Batch 2), `8e7bab6` (CI/env fixes), `23ce94e` (Batch 3 security fixes), `90b552b` (hydration fix), `18b8bbd` (invitation onboarding), `6b4b29e` (audit logging), `e9ceb42` (students), `e1e35a4` (db:sync), `c4331d1` (guardians), `7b29ca0` (CSV import API), `2ede95d` (CSV import page), `d1cadab` (classes/enrollment), `fa7f0cd` (sidebar Classes/Students nav), `c45a009` (nav docs), `11f3783` (email-verification enforcement), `f72f091` (Phase 4 batch 1) and `9ba01fb` (Phase 4 batch 2) were pushed on `feat/phase-3-student-profiles`. Phase 5 batches 1 and 2 exist only in the AI copy until reviewed and committed.
 
 ---
 
@@ -306,6 +307,16 @@ Join row for the many-to-many relationship between classes and subjects; a class
 - Cascades from `Workspace`, `Class` and `Subject`; RLS is enabled and forced with the same tenant policy.
 - Reads follow the class reader roles (OWNER/ADMIN/BRANCH_MANAGER/TEACHER); the class subject list is replaced by managers only, and archived classes cannot change their subjects.
 
+## ClassScheduleSlot
+
+Recurring weekly timetable period for a class. Slots store a weekday and minutes from midnight rather than dated lessons.
+
+- Fields: `workspaceId`, `classId`, `subjectId`, optional `membershipId` (teacher), `dayOfWeek` (`MONDAY`–`SUNDAY`), `startMinutes` (0–1439), `endMinutes` (1–1440) and optional `room`. A check constraint keeps `start < end`.
+- The `btree_gist` extension backs two exclusion constraints over `int4range(startMinutes, endMinutes, '[)')`: `class_schedule_slots_no_class_overlap` and the partial `class_schedule_slots_no_teacher_overlap` (only when a teacher is set). Adjacent half-open ranges are allowed.
+- Cascades from `Workspace`, `Class`, `Subject` and `Membership`; RLS is enabled and forced with the same tenant policy. Indexes cover `(workspaceId, classId, dayOfWeek, startMinutes)` and `(workspaceId, membershipId, dayOfWeek, startMinutes)`.
+- Reads follow the class reader roles; writes are manager-only. Archived classes reject writes, the subject must be linked to the class and active, and the optional teacher must be directory-eligible.
+- Prisma reports exclusion violations as `P2039` with a Postgres `23P01` cause; the service maps that to the same 409 conflict message as its pre-check.
+
 # 7. Authentication Implementation
 
 Implemented backend functionality:
@@ -565,13 +576,30 @@ Delivered in batch 1. Subjects are workspace-shared and linked to any number of 
 - Web: `apps/web/src/lib/subjects.ts` (types, labels), `components/subject-form.tsx` and `components/class-subject-form.tsx`; routes `subjects`, `subjects/new` and `subjects/[subjectId]/edit`; a "Subjects" sidebar entry derived from `studentsHref`; a Subjects card on the class detail page with the multi-select picker for managers.
 - Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration and refresh role grants.
 
+# 9H. Phase 5 — Weekly Timetable Implementation
+
+Delivered in batch 2. Slots are recurring weekly periods (weekday plus minute range) rather than dated lessons:
+
+- API: `apps/api/src/classes/class-schedule.service.ts` and `class-schedule.controller.ts` (registered in `ClassesModule`). Routes under `/workspaces/:workspaceId`:
+  - `GET /classes/:classId/schedule` — slots ordered by day then start minute, with the subject (id/name/code) and optional teacher (id/first name/last name).
+  - `POST /classes/:classId/schedule` — create; 201.
+  - `PATCH /classes/:classId/schedule/:slotId` — diffed update; a no-op writes no audit row.
+  - `DELETE /classes/:classId/schedule/:slotId` — hard delete with audit.
+- Access: reads for OWNER (override)/ADMIN/BRANCH_MANAGER/TEACHER; writes for OWNER (override)/ADMIN/BRANCH_MANAGER.
+- Validation: `startMinutes` 0–1439 and `endMinutes` 1–1440 with `start < end` (any minute is accepted; the UI steps by 15 minutes), the subject must be linked to the class and active, the optional teacher must be directory-eligible, and archived classes reject writes. Overlaps return 409 with a class or teacher specific message.
+- Database backstop: `btree_gist` plus `class_schedule_slots_no_class_overlap` and the partial `class_schedule_slots_no_teacher_overlap` exclusion constraints. Prisma surfaces the violation as `P2039` with a `23P01` cause, which the service maps to the same friendly 409.
+- Audit: `CLASS_SCHEDULE_SLOT_CREATED`, `CLASS_SCHEDULE_SLOT_UPDATED` and `CLASS_SCHEDULE_SLOT_DELETED` record class, subject, teacher, day and minute range (updated rows also list changed field names).
+- Migration: `20261114170000_add_class_schedule_slots` (DayOfWeek enum, audit values, `btree_gist`, table with check constraint, indexes, exclusion constraints, FKs, RLS enabled/forced with the tenant policy).
+- Web: `apps/web/src/lib/schedule.ts` (day labels, time conversion, slot typing), `components/class-schedule-manager.tsx` and a Weekly timetable card on the class detail page — add/edit form with day, start/end, subject, optional teacher and room; slots grouped by day with manager-only edit/remove; read-only for other staff.
+- Run `pnpm --filter @edu-platform/api db:sync` after pulling to apply the migration, install `btree_gist` and refresh role grants.
+
 # 10. Testing Status
 
-Current verified results after Phase 5 batch 1:
+Current verified results after Phase 5 batch 2:
 
 ## Unit Tests
 
-237 tests passed across 19 files:
+260 tests passed across 20 files:
 
 - Authentication service.
 - Workspace service.
@@ -585,6 +613,7 @@ Current verified results after Phase 5 batch 1:
 - Classes service (17 tests covering list/search/pagination, duplicate names, diffed updates, delete guard including teacher assignments and role checks).
 - Class-teachers service (20 tests covering class and teacher views, manager-only history, assignment validation, primary moves, soft-end history and role checks).
 - Subjects service (25 tests covering list filters/pagination, create/update/delete rules, duplicate names and codes, P2002 mapping, archive audit transitions, class subject views, selection replacement, archived-class and archived-subject rules, and role checks).
+- Class schedule service (23 tests covering list ordering, create variants and adjacent times, archived-class/minutes/subject/teacher rules, class and teacher overlap conflicts including the P2039 mapping, diffed updates, deletes and role checks).
 - Enrollments service (19 tests covering capacity, archived classes, history, status transitions, `endedAt` handling, duplicate 409 and role checks).
 - Teachers service (11 tests covering directory eligibility, search/status/pagination, detail 404s, profile creation and update, empty-payload rejection, and manager vs teacher-self authorization).
 - Session guard.
@@ -595,7 +624,7 @@ Current verified results after Phase 5 batch 1:
 
 ## E2E HTTP Tests
 
-100 tests passed across 9 files:
+110 tests passed across 10 files:
 
 - Authentication E2E (13).
 - Workspace and invitation E2E (19).
@@ -605,11 +634,12 @@ Current verified results after Phase 5 batch 1:
 - Teachers E2E (6: unauthenticated refusal, directory query parameters, detail, manager profile update, invalid payload, student refusal).
 - Class teachers E2E (9: unauthenticated refusal, list history flag, assign, missing membership id, primary patch, remove, teacher history, malformed id, student refusal).
 - Subjects E2E (10: unauthenticated refusal, directory query parameters, create with code normalisation, empty name rejection, patch, delete, class subject read/replace, duplicate and malformed ids, student refusal).
+- Class schedule E2E (10: unauthenticated refusal, list, create, invalid payloads, unequal minutes rejection, patch, delete, malformed ids, student refusal).
 - Application E2E (1).
 
 ## Database Integration Tests
 
-80 tests passed against a real PostgreSQL 17 database:
+88 tests passed against a real PostgreSQL 17 database:
 
 - 20 auth/workspace/invitation tests through the real HTTP pipeline, middleware and Prisma (session persistence, Argon2 hashing, CSRF rejection, workspace switching, cross-tenant 403s, invitation lifecycle, unverified invitation rejection).
 - 6 student tests: create/search/filter/pagination/detail, duplicate and invalid input, teacher read-only access, cross-workspace isolation, update with status change and audit metadata, unauthenticated access.
@@ -619,7 +649,8 @@ Current verified results after Phase 5 batch 1:
 - 5 teacher tests: directory + profile create/detail with audit metadata, teacher self-edit but not another member, manager profiling a non-teaching member, student/non-member refusal, and cross-workspace directory isolation.
 - 9 class-teacher tests: primary assignment visible from both the class and teacher views with audit metadata, primary movement, soft-end/history/reassign, manager-only history (teacher list and class page with `includeEnded=true`), duplicate/archived/ineligible/missing teacher rules, teacher read-only access with student/outsider refusal, cross-workspace isolation, class delete guard and invalid payloads.
 - 10 subject tests: create with audit metadata and class counts, search/filter/pagination, duplicate name/code and invalid payloads, diffed update with archive events, delete guard and `SUBJECT_DELETED`, class subject replacement with audit counts, archived subject/class/unknown-id rules, existing archived links surviving a later archive, teacher read-only with student/outsider refusal, and cross-workspace isolation.
-- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles, class-teacher assignments, subjects and class subjects), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
+- 8 class schedule tests: ordered list with audit counts, create variants with audit metadata, class overlap rejection and adjacent slots, teacher double-booking rejection, validation (range, unlinked subject, ineligible teacher), update/delete with cross-class 404s and audit, archived-class blocking with role access, and a direct DB assertion that the exclusion constraint reports `P2039`/`23P01`.
+- 7 RLS policy tests run as a restricted non-superuser role: no-context visibility, tenant visibility, user context, cross-tenant insert rejection (memberships, students, guardians, links, classes, enrollments, teacher profiles, class-teacher assignments, subjects, class subjects and schedule slots), cross-tenant update/delete, class visibility/update/delete, system bypass and no leakage between transactions.
 
 The suite creates and migrates its own `edu_platform_test` database. Run it with `pnpm --filter @edu-platform/api test:integration` (requires PostgreSQL). CI runs it in the `Database Integration Tests` job with a `postgres:17` service container.
 
@@ -725,7 +756,8 @@ Implemented already: tenant context resolution through the session's active work
 
 ## Phase 5 Remaining Work
 
-- Batch 1 (subject catalogue + class links) is delivered; batches/sections, timetables, class schedules and class history beyond enrollment periods remain.
+- Batch 1 (subject catalogue + class links) and batch 2 (weekly timetable) are delivered; batches/sections, class history beyond enrollment periods and room/resource management remain.
+- Timetable slots are weekly patterns only; there is no dated lesson, cancellation or substitution model yet, and teacher-absence handling is not implemented.
 - Teacher-to-subject specialization is not modeled yet; class-teacher assignments stay class-level until a `class_subject_teachers` design is agreed.
 - The subject delete route is API-only: the UI deliberately offers archive instead, and deletion is blocked while any class is linked.
 - The Subjects sidebar entry follows the same rule as Students, Classes and Teachers: it needs an active workspace before it becomes a link.
