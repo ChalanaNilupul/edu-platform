@@ -81,13 +81,15 @@ type DashboardShellProps = {
     | 'Classes'
     | 'Subjects'
     | 'Attendance'
-    | 'Finance';
+    | 'Finance'
+    | 'Learning';
   studentsHref?: string;
   teachersHref?: string;
   classesHref?: string;
   subjectsHref?: string;
   attendanceHref?: string;
   financeHref?: string;
+  learningHref?: string;
   children?: ReactNode;
 };
 
@@ -100,6 +102,7 @@ export function DashboardShell({
   subjectsHref,
   attendanceHref,
   financeHref,
+  learningHref,
   children,
 }: DashboardShellProps) {
   const resolvedTeachersHref =
@@ -130,6 +133,12 @@ export function DashboardShell({
     financeHref ??
     (studentsHref?.endsWith('/students')
       ? `${studentsHref.slice(0, -'/students'.length)}/finance`
+      : undefined);
+
+  const resolvedLearningHref =
+    learningHref ??
+    (studentsHref?.endsWith('/students')
+      ? `${studentsHref.slice(0, -'/students'.length)}/learning`
       : undefined);
 
   const fullName = [user.firstName, user.lastName].filter(Boolean).join(' ');
@@ -185,7 +194,9 @@ export function DashboardShell({
                           ? resolvedAttendanceHref
                           : item.label === 'Finance'
                             ? resolvedFinanceHref
-                            : item.href;
+                            : item.label === 'Learning'
+                              ? resolvedLearningHref
+                              : item.href;
 
               const className = `flex items-center gap-3 rounded-lg px-3 py-3 text-sm transition-colors ${
                 isActive

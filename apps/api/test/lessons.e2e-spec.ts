@@ -45,6 +45,7 @@ describe('Lessons API (e2e)', () => {
 
   const lessonsService = {
     list: vi.fn(),
+    listForWorkspace: vi.fn(),
     findOne: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
@@ -127,6 +128,39 @@ describe('Lessons API (e2e)', () => {
       page: 2,
       pageSize: 10,
     });
+  });
+
+  it('lists workspace lessons with filters', async () => {
+    lessonsService.listForWorkspace.mockResolvedValue({
+      items: [],
+      page: 2,
+      pageSize: 10,
+      total: 0,
+      totalPages: 0,
+    });
+
+    const response = await agent()
+      .get(
+        `/api/v1/workspaces/${WORKSPACE_ID}/lessons?classId=${CLASS_ID}&status=DRAFT&page=2&pageSize=10`,
+      )
+      .set('Cookie', 'edu_session=valid-session');
+
+    expect(response.status).toBe(200);
+    expect(lessonsService.listForWorkspace).toHaveBeenCalledWith(user.id, WORKSPACE_ID, {
+      classId: CLASS_ID,
+      status: 'DRAFT',
+      page: 2,
+      pageSize: 10,
+    });
+  });
+
+  it('rejects malformed workspace lesson queries', async () => {
+    const response = await agent()
+      .get(`/api/v1/workspaces/${WORKSPACE_ID}/lessons?classId=not-a-uuid`)
+      .set('Cookie', 'edu_session=valid-session');
+
+    expect(response.status).toBe(400);
+    expect(lessonsService.listForWorkspace).not.toHaveBeenCalled();
   });
 
   it('creates a lesson with trimmed input', async () => {

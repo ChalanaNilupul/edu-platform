@@ -162,6 +162,52 @@ describe('Lessons integration', () => {
     ).toBe(1);
   });
 
+  it('lists lessons across classes with filters and class summaries', async () => {
+    const owner = await registerVerifiedUser(context, 'owner@example.com');
+    const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');
+    const classA = await createClass(owner.client, workspace.id, 'Grade 8');
+    const classB = await createClass(owner.client, workspace.id, 'Grade 9');
+
+    const published = await createLesson(owner.client, workspace.id, classA.id, {
+      title: 'Algebra',
+      status: 'PUBLISHED',
+    });
+    const draft = await createLesson(owner.client, workspace.id, classB.id, { title: 'Geometry' });
+
+    const all = await owner.client.get(`/api/v1/workspaces/${workspace.id}/lessons`);
+
+    expect(all.status).toBe(200);
+    expect(all.body.total).toBe(2);
+    expect(
+      (all.body.items as { class: { name: string } }[]).map((item) => item.class.name).sort(),
+    ).toEqual(['Grade 8', 'Grade 9']);
+
+    const drafts = await owner.client.get(
+      `/api/v1/workspaces/${workspace.id}/lessons?status=DRAFT`,
+    );
+
+    expect(drafts.status).toBe(200);
+    expect((drafts.body.items as { id: string }[]).map((item) => item.id)).toEqual([draft.id]);
+
+    const byClass = await owner.client.get(
+      `/api/v1/workspaces/${workspace.id}/lessons?classId=${classA.id}`,
+    );
+
+    expect(byClass.status).toBe(200);
+    expect(byClass.body.items).toHaveLength(1);
+    expect(byClass.body.items[0]).toMatchObject({
+      id: published.id,
+      class: { id: classA.id },
+    });
+
+    const outsider = await registerVerifiedUser(context, 'outsider@example.com');
+    await createWorkspace(outsider.client, 'Other', 'INSTITUTE');
+
+    const denied = await outsider.client.get(`/api/v1/workspaces/${workspace.id}/lessons`);
+
+    expect(denied.status).toBe(403);
+  });
+
   it('rejects invalid dates, unlinked subjects and unknown fields', async () => {
     const owner = await registerVerifiedUser(context, 'owner@example.com');
     const workspace = await createWorkspace(owner.client, 'Institute', 'INSTITUTE');

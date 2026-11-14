@@ -21,6 +21,7 @@ import { WorkspaceAccessService } from '../workspaces/workspace-access.service.j
 import type { CreateLessonDto } from './dto/create-lesson.dto.js';
 import type { CreateMaterialDto } from './dto/create-material.dto.js';
 import type { ListLessonsQueryDto } from './dto/list-lessons.query.js';
+import type { ListWorkspaceLessonsQueryDto } from './dto/list-workspace-lessons.query.js';
 import type { UpdateLessonDto } from './dto/update-lesson.dto.js';
 import type { UpdateMaterialDto } from './dto/update-material.dto.js';
 
@@ -66,9 +67,15 @@ const lessonDetailSelect = {
   materials: { select: materialSelect, orderBy: { createdAt: 'asc' } },
 } satisfies Prisma.LessonSelect;
 
+const lessonHubSelect = {
+  ...lessonListSelect,
+  class: { select: { id: true, name: true, status: true } },
+} satisfies Prisma.LessonSelect;
+
 type MaterialRow = Prisma.LessonMaterialGetPayload<{ select: typeof materialSelect }>;
 type LessonListRow = Prisma.LessonGetPayload<{ select: typeof lessonListSelect }>;
 type LessonDetailRow = Prisma.LessonGetPayload<{ select: typeof lessonDetailSelect }>;
+type LessonHubRow = Prisma.LessonGetPayload<{ select: typeof lessonHubSelect }>;
 
 export type LessonAuthor = { membershipId: string; name: string };
 
@@ -86,6 +93,10 @@ export type LessonDetailView = Omit<
   materialCount: number;
   createdBy: LessonAuthor | null;
   materials: MaterialRow[];
+};
+
+export type LessonHubItemView = LessonListView & {
+  class: { id: string; name: string; status: ClassStatus };
 };
 
 function formatCalendarDate(date: Date): string {
@@ -254,6 +265,51 @@ export class LessonsService {
 
       return {
         items: rows.map(toListView),
+        page,
+        pageSize,
+        total,
+        totalPages: Math.ceil(total / pageSize),
+      };
+    });
+  }
+
+  async listForWorkspace(
+    actorId: string,
+    workspaceId: string,
+    query: ListWorkspaceLessonsQueryDto,
+  ) {
+    const page = query.page ?? 1;
+    const pageSize = Math.min(query.pageSize ?? PAGE_SIZE, MAX_PAGE_SIZE);
+
+    return this.tenant.runAsTenant(workspaceId, async (tx) => {
+      await this.workspaceAccess.requireRoles(actorId, workspaceId, READ_ROLES, tx);
+
+      const where: Prisma.LessonWhereInput = { workspaceId };
+
+      if (query.classId) {
+        where.classId = query.classId;
+      }
+
+      if (query.status) {
+        where.status = query.status;
+      }
+
+      const [rows, total] = await Promise.all([
+        tx.lesson.findMany({
+          where,
+          select: lessonHubSelect,
+          orderBy: [{ lessonDate: 'desc' }, { createdAt: 'desc' }],
+          skip: (page - 1) * pageSize,
+          take: pageSize,
+        }),
+        tx.lesson.count({ where }),
+      ]);
+
+      return {
+        items: rows.map((row: LessonHubRow): LessonHubItemView => ({
+          ...toListView(row),
+          class: row.class,
+        })),
         page,
         pageSize,
         total,

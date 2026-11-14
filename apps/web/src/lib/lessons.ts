@@ -52,6 +52,18 @@ export type LessonListResponse = {
   totalPages: number;
 };
 
+export type LessonHubRecord = LessonRecord & {
+  class: { id: string; name: string; status: ClassStatus };
+};
+
+export type LessonHubResponse = {
+  items: LessonHubRecord[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
 export const lessonStatusLabels: Record<LessonStatus, string> = {
   DRAFT: 'Draft',
   PUBLISHED: 'Published',

@@ -24,6 +24,7 @@ import { WorkspaceRolesGuard } from '../workspaces/workspace-roles.guard.js';
 import { CreateLessonDto } from './dto/create-lesson.dto.js';
 import { CreateMaterialDto } from './dto/create-material.dto.js';
 import { ListLessonsQueryDto } from './dto/list-lessons.query.js';
+import { ListWorkspaceLessonsQueryDto } from './dto/list-workspace-lessons.query.js';
 import { UpdateLessonDto } from './dto/update-lesson.dto.js';
 import { UpdateMaterialDto } from './dto/update-material.dto.js';
 import { LessonsService } from './lessons.service.js';
@@ -55,6 +56,17 @@ export class LessonsController {
     @Body(new ValidationPipe({ expectedType: CreateLessonDto })) dto: CreateLessonDto,
   ) {
     return this.lessonsService.create(user.id, workspaceId, classId, dto);
+  }
+
+  @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)
+  @Get('lessons')
+  listForWorkspace(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
+    @Query(new ValidationPipe({ expectedType: ListWorkspaceLessonsQueryDto, transform: true }))
+    query: ListWorkspaceLessonsQueryDto,
+  ) {
+    return this.lessonsService.listForWorkspace(user.id, workspaceId, query);
   }
 
   @WorkspaceRoles(WorkspaceRole.ADMIN, WorkspaceRole.BRANCH_MANAGER, WorkspaceRole.TEACHER)

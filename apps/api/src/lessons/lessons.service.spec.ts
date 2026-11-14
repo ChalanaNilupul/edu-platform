@@ -169,6 +169,61 @@ describe('LessonsService', () => {
     });
   });
 
+  describe('listForWorkspace', () => {
+    it('filters by class and status and includes the class summary', async () => {
+      tx.lesson.findMany.mockResolvedValue([
+        {
+          ...lessonListRow,
+          class: { id: CLASS_ID, name: 'Grade 8', status: ClassStatus.ACTIVE },
+        },
+      ]);
+      tx.lesson.count.mockResolvedValue(1);
+
+      const result = await service.listForWorkspace(ACTOR_ID, WORKSPACE_ID, {
+        classId: CLASS_ID,
+        status: LessonStatus.PUBLISHED,
+        page: 1,
+        pageSize: 20,
+      });
+
+      expect(workspaceAccessMock.requireRoles).toHaveBeenCalledWith(
+        ACTOR_ID,
+        WORKSPACE_ID,
+        READ_ROLES,
+        tx,
+      );
+      expect(tx.lesson.findMany).toHaveBeenCalledWith({
+        where: { workspaceId: WORKSPACE_ID, classId: CLASS_ID, status: LessonStatus.PUBLISHED },
+        select: expect.any(Object),
+        orderBy: [{ lessonDate: 'desc' }, { createdAt: 'desc' }],
+        skip: 0,
+        take: 20,
+      });
+      expect(result).toMatchObject({ page: 1, pageSize: 20, total: 1, totalPages: 1 });
+      expect(result.items[0]).toMatchObject({
+        id: LESSON_ID,
+        lessonDate: '2026-11-10',
+        class: { id: CLASS_ID, name: 'Grade 8', status: ClassStatus.ACTIVE },
+      });
+    });
+
+    it('lists every class when no filters are given', async () => {
+      tx.lesson.findMany.mockResolvedValue([]);
+      tx.lesson.count.mockResolvedValue(0);
+
+      const result = await service.listForWorkspace(ACTOR_ID, WORKSPACE_ID, {});
+
+      expect(tx.lesson.findMany).toHaveBeenCalledWith({
+        where: { workspaceId: WORKSPACE_ID },
+        select: expect.any(Object),
+        orderBy: [{ lessonDate: 'desc' }, { createdAt: 'desc' }],
+        skip: 0,
+        take: 20,
+      });
+      expect(result).toMatchObject({ total: 0, totalPages: 0, items: [] });
+    });
+  });
+
   describe('create', () => {
     it('creates a draft lesson and records an audit event', async () => {
       tx.lesson.create.mockResolvedValue(lessonDetailRow);
